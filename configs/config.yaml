@@ -1,0 +1,57 @@
+server:
+  port: 8080
+
+app:
+  jwt_secret: "JWT_SECRET_PASSWORD"
+  encryption_key: "202b49a8b937101f9380bd19d8f3498fd5ac5c91b9aa50230f9948ed61b42088"
+
+auth:
+  whitelist:
+    - /api/v1/auth/login
+    - /api/v1/auth/refresh-token
+    - /health
+    - /metrics
+
+database:
+  host: "127.0.0.1"
+  username: "root"
+  password: "asd123.com"
+  dbname: "valyria"
+  port: 3306
+  max_idle_conns: 10
+  max_open_conns: 100
+  conn_max_lifetime: "1h"
+
+redis:
+  addr: "127.0.0.1:6379"
+  password: ""
+  db: 0
+
+policy:
+  model_path: "configs/rbac_model.conf"
+  policy_table: "valyria_kingsguard_casbin_policy"
+  auto_save: true
+
+logging:
+  info: "logs/info.log"
+  error: "logs/error.log"
+
+kubernetes:
+  timeout: 30
+  resources:
+    - clusters
+    - namespaces
+    - pods
+    - deployments
+    - replicasets
+    - daemonsets
+    - statefulsets
+    - services
+    - configmaps
+    - secrets
+    - nodes
+  actions:
+    - exec
+    - logs
+    - scale
+    - rollout
