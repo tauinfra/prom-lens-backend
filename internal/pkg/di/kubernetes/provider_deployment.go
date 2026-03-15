@@ -9,14 +9,14 @@ import (
 
 type DeploymentProvider struct {
 	Repo       *repository.DeploymentRepository
-	Service    *service.DeploymentService
+	Service    *service.DeploymentManager
 	Controller *controller.DeploymentController
 }
 
 func NewDeploymentProvider(cfgFactory *repository.KubeConfigFactory, gvkFactory *factory.GVKFactory) *DeploymentProvider {
 	// 初始化用户模块的依赖
 	repo := repository.NewDeploymentRepository(cfgFactory, gvkFactory)
-	svc := service.NewDeploymentService(repo)
+	svc := service.NewDeploymentManager(repo)
 	ctrl := controller.NewDeploymentController(svc)
 
 	return &DeploymentProvider{

@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"github.com/redis/go-redis/v9"
 	"time"
-	"valyria-backend/internal/core/configs"
+	"valyria-backend/internal/core/config"
 	"valyria-backend/internal/core/logger"
 )
 
-var Redis *redis.Client
+var Redis *redis.Client // Deprecated: 使用 InitRedis 返回的客户端，全局变量仅用于向后兼容
 
-func InitRedis(cfg *configs.Config) error {
+func InitRedis(cfg *config.Config) (*redis.Client, error) {
 	// 设置默认值
 	poolSize := cfg.Redis.PoolSize
 	if poolSize == 0 {
@@ -35,12 +35,24 @@ func InitRedis(cfg *configs.Config) error {
 
 	// 测试连接
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		return fmt.Errorf("failed to connect redis %s: %w", cfg.Redis.Addr, err)
+		return nil, fmt.Errorf("failed to connect redis %s: %w", cfg.Redis.Addr, err)
 	}
 
-	// 设置全局变量
+	// 设置全局变量（向后兼容）
 	Redis = rdb
 
 	logger.Infof("Redis connected successfully: %s", cfg.Redis.Addr)
+	return rdb, nil
+}
+
+// CloseRedis 关闭 Redis 连接
+func CloseRedis() error {
+	if Redis == nil {
+		return nil
+	}
+	if err := Redis.Close(); err != nil {
+		return fmt.Errorf("failed to close redis: %w", err)
+	}
+	logger.Info("Redis connection closed.")
 	return nil
 }

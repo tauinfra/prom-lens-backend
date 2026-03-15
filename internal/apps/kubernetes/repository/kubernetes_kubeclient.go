@@ -23,8 +23,7 @@ func NewKubeConfigFactory(cluster ClusterRepository, encryptor encryption.Encryp
 	}
 }
 
-func (f *KubeConfigFactory) GetKubeConfig(ctx context.Context, id int) (*KubeConfig, error) {
-	println(id)
+func (f *KubeConfigFactory) GetKubeConfig(ctx context.Context, id uint) (*KubeConfig, error) {
 	clusterWithToken, err := f.cluster.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("kubernetes cluster get failed, err: %v", err)
@@ -38,7 +37,7 @@ func (f *KubeConfigFactory) GetKubeConfig(ctx context.Context, id int) (*KubeCon
 	return kubeConfig, nil
 }
 
-func (f *KubeConfigFactory) GetRestConfig(ctx context.Context, id int) (*rest.Config, error) {
+func (f *KubeConfigFactory) GetRestConfig(ctx context.Context, id uint) (*rest.Config, error) {
 	clusterWithToken, err := f.cluster.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("kubernetes cluster get failed, err: %v", err)
@@ -48,9 +47,12 @@ func (f *KubeConfigFactory) GetRestConfig(ctx context.Context, id int) (*rest.Co
 		return nil, fmt.Errorf("kubernetes decrypt token failed, err: %v", err)
 	}
 	clusterWithToken.Token = decryptToken
+	kubeQPS, kubeBurst := kubeClientLimits()
 	restConfig := &rest.Config{
 		Host:        clusterWithToken.Host,
 		BearerToken: clusterWithToken.Token,
+		QPS:         kubeQPS,
+		Burst:       kubeBurst,
 		TLSClientConfig: rest.TLSClientConfig{
 			Insecure: true, // 设置为 true 时，不需要 CA
 		},
@@ -58,7 +60,7 @@ func (f *KubeConfigFactory) GetRestConfig(ctx context.Context, id int) (*rest.Co
 	return restConfig, nil
 }
 
-func (f *KubeConfigFactory) GetClientSet(ctx context.Context, id int) (*kubernetes.Clientset, error) {
+func (f *KubeConfigFactory) GetClientSet(ctx context.Context, id uint) (*kubernetes.Clientset, error) {
 	kubeConfig, err := f.GetKubeConfig(ctx, id)
 	if err != nil {
 		return nil, err
@@ -66,7 +68,31 @@ func (f *KubeConfigFactory) GetClientSet(ctx context.Context, id int) (*kubernet
 	return kubeConfig.ClientSet()
 }
 
-func (f *KubeConfigFactory) GetTektonClientSet(ctx context.Context, id int) (*clientsetversioned.Clientset, error) {
+// GetRestConfigAsUser 返回带 Impersonate 的 rest.Config，username 为空时等同于 GetRestConfig
+func (f *KubeConfigFactory) GetRestConfigAsUser(ctx context.Context, id uint, username string) (*rest.Config, error) {
+	restConfig, err := f.GetRestConfig(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if username == "" {
+		return restConfig, nil
+	}
+	cfg := *restConfig
+	cfg.Impersonate = rest.ImpersonationConfig{UserName: username}
+	return &cfg, nil
+}
+
+// GetClientSetAsUser 返回以指定用户身份访问集群的 ClientSet（Impersonate），用于用户维度的 RBAC
+// username 为空时行为等同于 GetClientSet（不 Impersonate）
+func (f *KubeConfigFactory) GetClientSetAsUser(ctx context.Context, id uint, username string) (*kubernetes.Clientset, error) {
+	restConfig, err := f.GetRestConfigAsUser(ctx, id, username)
+	if err != nil {
+		return nil, err
+	}
+	return kubernetes.NewForConfig(restConfig)
+}
+
+func (f *KubeConfigFactory) GetTektonClientSet(ctx context.Context, id uint) (*clientsetversioned.Clientset, error) {
 	kubeConfig, err := f.GetKubeConfig(ctx, id)
 	if err != nil {
 		return nil, err

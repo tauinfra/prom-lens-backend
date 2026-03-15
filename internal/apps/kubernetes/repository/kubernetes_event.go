@@ -3,14 +3,13 @@ package repository
 import (
 	"context"
 	"fmt"
-	"valyria-backend/internal/core/logger"
 	"valyria-backend/internal/pkg/k8s/helper"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type EventRepository interface {
-	List(ctx context.Context, id int, ns, kind, name string) (events []Event, err error)
+	List(ctx context.Context, id uint, ns, kind, name string) (events []Event, err error)
 }
 
 type eventRepository struct {
@@ -30,19 +29,18 @@ type Event struct {
 	CreateAt string `json:"createAt"`
 }
 
-func (r *eventRepository) List(ctx context.Context, id int, ns, kind, name string) (events []Event, err error) {
+func (r *eventRepository) List(ctx context.Context, id uint, ns, kind, name string) (events []Event, err error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
 	eventHelper := helper.NewEventHelper()
-	response, err := client.CoreV1().Events(ns).List(context.TODO(), metav1.ListOptions{
+	response, err := client.CoreV1().Events(ns).List(ctx, metav1.ListOptions{
 		FieldSelector: eventHelper.BuildEventFieldSelector(kind, name),
 	})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 events list failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 events list failed. err: %v", err)
 	}
 	for _, item := range response.Items {
 		events = append(events, Event{

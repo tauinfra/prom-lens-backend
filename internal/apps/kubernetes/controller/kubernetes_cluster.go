@@ -3,20 +3,20 @@ package controller
 import (
 	"net/http"
 	"strconv"
-	"valyria-backend/internal/apps/kubernetes/model"
+	"valyria-backend/internal/apps/kubernetes/request"
 	"valyria-backend/internal/apps/kubernetes/service"
-	"valyria-backend/internal/core/logger"
 	pg "valyria-backend/internal/core/pagination"
+	"valyria-backend/internal/pkg/ginhelper"
 
 	"github.com/gin-gonic/gin"
 )
 
 // ClusterController 定义控制器结构体
 type ClusterController struct {
-	cluster service.ClusterService // 使用服务接口
+	cluster service.ClusterManager // 使用服务接口
 }
 
-func NewClusterController(cluster service.ClusterService) *ClusterController {
+func NewClusterController(cluster service.ClusterManager) *ClusterController {
 	return &ClusterController{cluster: cluster}
 }
 
@@ -42,8 +42,12 @@ func (c *ClusterController) List(ctx *gin.Context) {
 }
 
 func (c *ClusterController) Get(ctx *gin.Context) {
-	id, _ := strconv.Atoi(ctx.Param("id"))
-	data, err := c.cluster.Get(ctx, id)
+	clusterIDU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	clusterID := clusterIDU
+	data, err := c.cluster.Get(ctx, clusterID)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
@@ -52,46 +56,72 @@ func (c *ClusterController) Get(ctx *gin.Context) {
 }
 
 func (c *ClusterController) Create(ctx *gin.Context) {
-	var data model.Cluster
-	if err := ctx.ShouldBindJSON(&data); err != nil {
-		logger.Errorf("Data binding request failed, error: %v", err)
+	var req request.CreateClusterRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
-	if err := c.cluster.Create(ctx, &data); err != nil {
-		logger.Errorf("Kubernetes Cluster '%v' creation failed, error:: %v", data.Name, err)
+	// 从 context 获取用户名并传递给 service
+	var username string
+	if usernameValue, exists := ctx.Get("username"); exists {
+		if usernameStr, ok := usernameValue.(string); ok && usernameStr != "" {
+			username = usernameStr
+		}
+	}
+	if err := c.cluster.Create(ctx, &req, username); err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
-	logger.Infof("Kubernetes Cluster '%v' has been created successfully.", data.Name)
-	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data})
+	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
 }
 
 func (c *ClusterController) Update(ctx *gin.Context) {
-	var data model.Cluster
-	var id, _ = strconv.Atoi(ctx.Param("id"))
+	var req request.UpdateClusterRequest
+	clusterIDU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	clusterID := clusterIDU
 
-	if err := ctx.ShouldBindJSON(&data); err != nil {
-		logger.Errorf("Data binding request failed, error: %v", err)
+	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
 		return
 	}
-	if err := c.cluster.Update(ctx, id, &data); err != nil {
-		logger.Errorf("Data binding request failed, error: %v", err)
+	if err := c.cluster.Update(ctx, clusterID, &req); err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
 		return
 	}
-	logger.Infof("Kubernetes Cluster '%v' has been updated successfully.", data.Name)
-	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data})
+	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
+}
+
+func (c *ClusterController) UpdateToken(ctx *gin.Context) {
+	var req request.UpdateClusterTokenRequest
+	clusterIDU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	clusterID := clusterIDU
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		return
+	}
+	if err := c.cluster.UpdateToken(ctx, clusterID, &req); err != nil {
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
 }
 
 func (c *ClusterController) Delete(ctx *gin.Context) {
-	var id, _ = strconv.Atoi(ctx.Param("id"))
+	clusterIDU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	clusterID := clusterIDU
 
-	if err := c.cluster.Delete(ctx, id); err != nil {
+	if err := c.cluster.Delete(ctx, clusterID); err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
-	logger.Infof("Kubernetes ClusterID '%d' has been deleted successfully.", id)
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
 }

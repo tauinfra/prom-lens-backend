@@ -21,7 +21,7 @@ type QueryParams struct {
 
 type Condition struct {
 	Field    string      `json:"field"`
-	Operator string      `json:"operator"` // =, !=, >, >=, <, <=, IN, LIKE, BETWEEN
+	Operator string      `json:"operator"` // 条件: =, !=, >, >=, <, <=, IN, LIKE, BETWEEN
 	Value    interface{} `json:"value"`
 }
 
@@ -48,11 +48,25 @@ func applyGlobalSearch(query *gorm.DB, keyword string, fields []string) *gorm.DB
 	var orConditions []string
 	var args []interface{}
 	for _, field := range fields {
-		orConditions = append(orConditions, field+" LIKE ?")
+		orConditions = append(orConditions, quoteField(field)+" LIKE ?")
 		args = append(args, "%"+keyword+"%")
 	}
 
 	return query.Where(strings.Join(orConditions, " OR "), args...)
+}
+
+func quoteField(field string) string {
+	if field == "" {
+		return field
+	}
+	parts := strings.Split(field, ".")
+	for i, part := range parts {
+		if part == "" {
+			continue
+		}
+		parts[i] = "`" + part + "`"
+	}
+	return strings.Join(parts, ".")
 }
 
 // 应用排序
@@ -88,6 +102,10 @@ func applyConditions(query *gorm.DB, conditions []Condition) *gorm.DB {
 			query = query.Where(cond.Field+" IN (?)", cond.Value)
 		case "LIKE":
 			query = query.Where(cond.Field+" LIKE ?", cond.Value)
+		case "IS_NULL":
+			query = query.Where(cond.Field + " IS NULL")
+		case "IS_NOT_NULL":
+			query = query.Where(cond.Field + " IS NOT NULL")
 		case "BETWEEN":
 			if values, ok := cond.Value.([]interface{}); ok && len(values) == 2 {
 				query = query.Where(cond.Field+" BETWEEN ? AND ?", values[0], values[1])
@@ -117,68 +135,88 @@ func Paginate(tx *gorm.DB, data interface{}, params QueryParams) (Pagination, er
 	var pagination Pagination
 	var total int64
 
-	// 设置默认分页参数
-	if params.Page == 0 {
-		params.Page = 1 // 默认为 1 页
+	// ---------- 1. 默认分页参数 ----------
+	if params.Page <= 0 {
+		params.Page = 1
 	}
-	if params.Size == 0 {
-		params.Size = 10 // 默认为 10 行数据
+	if params.Size <= 0 {
+		params.Size = 10
 	}
 
-	query := tx.Model(data) // 使用全局 DB
+	query := tx
+	// 兜底：只有没指定 Table 才用 Model
+	if query.Statement.Table == "" {
+		query = query.Model(data)
+	}
 
-	// 解析模型结构（强制解析）
+	// ---------- 2. 强制解析模型（用于全局搜索字段） ----------
 	if err := query.Statement.Parse(data); err != nil {
-		return pagination, fmt.Errorf("failed to parse model: %w", err)
+		return pagination, fmt.Errorf("failed to parse model, err: %w", err)
 	}
-	// 1. 获取数据表所有字段
-	var searchFields []string
-	stmt := query.Statement
-	if stmt.Schema != nil {
-		for _, field := range stmt.Schema.Fields {
-			if field.DBName != "" {
-				searchFields = append(searchFields, field.DBName)
+
+	// ---------- 3. 全局搜索 ----------
+	if params.Keyword != "" {
+		var searchFields []string
+		stmt := query.Statement
+		if stmt.Schema != nil {
+			for _, field := range stmt.Schema.Fields {
+				if field.DBName != "" {
+					searchFields = append(searchFields, field.DBName)
+				}
 			}
 		}
-	}
-	// 2. 应用全局搜索
-	if params.Keyword != "" && len(searchFields) > 0 {
-		// 基于表字段匹配关键字
-		query = applyGlobalSearch(query, params.Keyword, searchFields)
+		if len(searchFields) > 0 {
+			query = applyGlobalSearch(query, params.Keyword, searchFields)
+		}
 	}
 
-	// 应用 JOIN
-	query = applyJoins(query, params.Joins)
-
-	// 应用排序
-	query = applySorting(query, params.SortBy, params.SortOrder)
-
-	// Preload 预加载
-	for _, preload := range params.Preloads {
-		query = query.Preload(preload)
+	// ---------- 4. JOIN（⚠️ 放在 where 之前） ----------
+	if len(params.Joins) > 0 {
+		query = applyJoins(query, params.Joins)
 	}
 
-	// 精确匹配 Filters
+	// ---------- 5. Filters（仅等值匹配，保持旧行为） ----------
 	for column, value := range params.Filters {
 		query = query.Where(column+" = ?", value)
 	}
 
-	// 应用动态条件
-	query = applyConditions(query, params.Conditions)
+	// ---------- 6. 动态 Conditions（新增能力） ----------
+	if len(params.Conditions) > 0 {
+		query = applyConditions(query, params.Conditions)
+	}
 
-	// 统计
-	if err := query.Count(&total).Error; err != nil {
+	// ---------- 7. COUNT（防 JOIN 放大，可选） ----------
+	countQuery := query
+
+	// ⚠️ 仅当存在 JOIN 时才 Distinct，避免影响旧模块
+	if len(params.Joins) > 0 {
+		// 默认用主表 id 去重（假设所有表都有 id）
+		if query.Statement.Table != "" {
+			countQuery = countQuery.Distinct(query.Statement.Table + ".id")
+		}
+	}
+
+	if err := countQuery.Count(&total).Error; err != nil {
 		return pagination, err
 	}
 
-	// 计算偏移量
-	offset := (params.Page - 1) * params.Size
+	// ---------- 8. 排序 ----------
+	query = applySorting(query, params.SortBy, params.SortOrder)
 
-	// 获取分页数据
+	// ---------- 9. Preload ----------
+	for _, preload := range params.Preloads {
+		query = query.Preload(preload)
+	}
+
+	// ---------- 10. 分页 ----------
+	offset := (params.Page - 1) * params.Size
 	if err := query.Offset(offset).Limit(params.Size).Find(data).Error; err != nil {
 		return pagination, err
 	}
 
-	// 返回分页信息
-	return Pagination{Page: params.Page, Size: params.Size, Total: total}, nil
+	return Pagination{
+		Page:  params.Page,
+		Size:  params.Size,
+		Total: total,
+	}, nil
 }

@@ -9,14 +9,14 @@ import (
 
 type StatefulSetProvider struct {
 	Repo       *repository.StatefulSetRepository
-	Service    *service.StatefulSetService
+	Service    *service.StatefulSetManager
 	Controller *controller.StatefulSetController
 }
 
 func NewStatefulSetProvider(cfgFactory *repository.KubeConfigFactory, gvkFactory *factory.GVKFactory) *StatefulSetProvider {
 	// 初始化用户模块的依赖
 	repo := repository.NewStatefulSetRepository(cfgFactory, gvkFactory)
-	svc := service.NewStatefulSetService(repo)
+	svc := service.NewStatefulSetManager(repo)
 	ctrl := controller.NewStatefulSetController(svc)
 
 	return &StatefulSetProvider{

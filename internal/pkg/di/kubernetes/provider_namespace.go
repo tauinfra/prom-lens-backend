@@ -9,14 +9,14 @@ import (
 
 type NamespaceProvider struct {
 	Repo       *repository.NamespaceRepository
-	Service    *service.NamespaceService
+	Service    *service.NamespaceManager
 	Controller *controller.NamespaceController
 }
 
 func NewNamespaceProvider(cfgFactory *repository.KubeConfigFactory, gvkFactory *factory.GVKFactory) *NamespaceProvider {
 	// 初始化用户模块的依赖
 	repo := repository.NewNamespaceRepository(cfgFactory, gvkFactory)
-	svc := service.NewNamespaceService(repo)
+	svc := service.NewNamespaceManager(repo)
 	ctrl := controller.NewNamespaceController(svc)
 
 	return &NamespaceProvider{

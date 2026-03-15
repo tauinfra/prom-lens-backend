@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"valyria-backend/internal/core/logger"
 	"valyria-backend/internal/pkg/k8s/factory"
 	"valyria-backend/internal/pkg/k8s/helper"
 
@@ -12,11 +11,11 @@ import (
 )
 
 type NodeRepository interface {
-	List(ctx context.Context, id int) ([]Node, error)
-	Get(ctx context.Context, id int, name string) (*corev1.Node, error)
-	GetDetail(ctx context.Context, id int, name string) (*Node, error)
-	Update(ctx context.Context, id int, node *corev1.Node) (*corev1.Node, error)
-	Cordon(ctx context.Context, id int, name string) (*corev1.Node, error) // 调度
+	List(ctx context.Context, id uint) ([]Node, error)
+	Get(ctx context.Context, id uint, name string) (*corev1.Node, error)
+	GetDetail(ctx context.Context, id uint, name string) (*Node, error)
+	Update(ctx context.Context, id uint, node *corev1.Node) (*corev1.Node, error)
+	Cordon(ctx context.Context, id uint, name string) (*corev1.Node, error) // 调度
 }
 
 type Node struct {
@@ -51,7 +50,7 @@ func NewNodeRepository(cfgFactory *KubeConfigFactory, gvkFactory *factory.GVKFac
 	return &nodes{cfgFactory: cfgFactory, gvkFactory: gvkFactory}
 }
 
-func (r *nodes) List(ctx context.Context, id int) ([]Node, error) {
+func (r *nodes) List(ctx context.Context, id uint) ([]Node, error) {
 	var (
 		data []Node
 		node Node
@@ -63,10 +62,9 @@ func (r *nodes) List(ctx context.Context, id int) ([]Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	response, err := client.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
 	if err != nil {
-		logger.ZapLogger.Error(fmt.Sprintf("kubernetes CoreV1 nodes list failed. err: %v1", err))
-		return data, err
+		return data, fmt.Errorf("kubernetes CoreV1 nodes list failed. err: %v", err)
 	}
 
 	for _, item := range response.Items {
@@ -96,21 +94,20 @@ func (r *nodes) List(ctx context.Context, id int) ([]Node, error) {
 	return data, nil
 }
 
-func (r *nodes) Get(ctx context.Context, id int, name string) (*corev1.Node, error) {
+func (r *nodes) Get(ctx context.Context, id uint, name string) (*corev1.Node, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.CoreV1().Nodes().Get(context.TODO(), name, metav1.GetOptions{})
+	response, err := client.CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 node get failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 node get failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *nodes) GetDetail(ctx context.Context, id int, name string) (*Node, error) {
+func (r *nodes) GetDetail(ctx context.Context, id uint, name string) (*Node, error) {
 	var (
 		data Node
 		pod  Pod
@@ -124,10 +121,9 @@ func (r *nodes) GetDetail(ctx context.Context, id int, name string) (*Node, erro
 		return nil, err
 	}
 	// 获取 node 信息
-	node, err := client.CoreV1().Nodes().Get(context.TODO(), name, metav1.GetOptions{})
+	node, err := client.CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.ZapLogger.Error(fmt.Sprintf("kubernetes CoreV1 nodes get failed. err: %v1", err))
-		return &data, err
+		return &data, fmt.Errorf("kubernetes CoreV1 nodes get failed. err: %v", err)
 	}
 
 	data = Node{
@@ -182,12 +178,11 @@ func (r *nodes) GetDetail(ctx context.Context, id int, name string) (*Node, erro
 
 	// 获取本节点上的 pods 信息
 	nodeName := data.Name
-	pods, err := client.CoreV1().Pods("").List(context.TODO(), metav1.ListOptions{
+	pods, err := client.CoreV1().Pods("").List(ctx, metav1.ListOptions{
 		FieldSelector: fmt.Sprintf("spec.nodeName=%s", nodeName),
 	})
 	if err != nil {
-		logger.ZapLogger.Error(fmt.Sprintf("kubernetes CoreV1 pods list failed. err: %v", err))
-		return &data, err
+		return &data, fmt.Errorf("kubernetes CoreV1 pods list failed. err: %v", err)
 	}
 	for _, item := range pods.Items {
 		pod.Namespace = item.Namespace
@@ -204,36 +199,33 @@ func (r *nodes) GetDetail(ctx context.Context, id int, name string) (*Node, erro
 	return &data, nil
 }
 
-func (r *nodes) Cordon(ctx context.Context, id int, name string) (*corev1.Node, error) {
+func (r *nodes) Cordon(ctx context.Context, id uint, name string) (*corev1.Node, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	// 获取节点信息
-	node, err := client.CoreV1().Nodes().Get(context.TODO(), name, metav1.GetOptions{})
+	node, err := client.CoreV1().Nodes().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.ZapLogger.Error(fmt.Sprintf("kubernetes CoreV1 node get failed. err: %v1", err))
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 node get failed. err: %v", err)
 	}
 	node.Spec.Unschedulable = !node.Spec.Unschedulable // 调度状态(取反)
-	response, err := client.CoreV1().Nodes().Update(context.TODO(), node, metav1.UpdateOptions{})
+	response, err := client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
 	if err != nil {
-		logger.ZapLogger.Error(fmt.Sprintf("kubernetes CoreV1 node unschedulable update failed. err: %v1", err))
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 node unschedulable update failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *nodes) Update(ctx context.Context, id int, node *corev1.Node) (*corev1.Node, error) {
+func (r *nodes) Update(ctx context.Context, id uint, node *corev1.Node) (*corev1.Node, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.CoreV1().Nodes().Update(context.TODO(), node, metav1.UpdateOptions{})
+	response, err := client.CoreV1().Nodes().Update(ctx, node, metav1.UpdateOptions{})
 	if err != nil {
-		logger.ZapLogger.Error(fmt.Sprintf("kubernetes CoreV1 node update failed. err: %v1", err))
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 node update failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil

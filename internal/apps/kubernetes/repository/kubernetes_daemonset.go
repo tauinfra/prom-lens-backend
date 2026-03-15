@@ -3,7 +3,6 @@ package repository
 import (
 	"context"
 	"fmt"
-	"valyria-backend/internal/core/logger"
 	"valyria-backend/internal/pkg/k8s/factory"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -11,12 +10,12 @@ import (
 )
 
 type DaemonSetRepository interface {
-	List(ctx context.Context, id int, ns string) ([]DaemonSet, error)
-	Get(ctx context.Context, id int, ns, name string) (*appsv1.DaemonSet, error)
-	GetDetail(ctx context.Context, id int, ns, name string) (DaemonSet, error)
-	Create(ctx context.Context, id int, ns string, body *appsv1.DaemonSet) (*appsv1.DaemonSet, error)
-	Update(ctx context.Context, id int, ns string, body *appsv1.DaemonSet) (*appsv1.DaemonSet, error)
-	Delete(ctx context.Context, id int, ns, name string) error
+	List(ctx context.Context, id uint, ns string) ([]DaemonSet, error)
+	Get(ctx context.Context, id uint, ns, name string) (*appsv1.DaemonSet, error)
+	GetDetail(ctx context.Context, id uint, ns, name string) (DaemonSet, error)
+	Create(ctx context.Context, id uint, ns string, body *appsv1.DaemonSet) (*appsv1.DaemonSet, error)
+	Update(ctx context.Context, id uint, ns string, body *appsv1.DaemonSet) (*appsv1.DaemonSet, error)
+	Delete(ctx context.Context, id uint, ns, name string) error
 }
 
 type DaemonSet struct {
@@ -44,7 +43,7 @@ func NewDaemonSetRepository(kubeFactory *KubeConfigFactory, gvkFactory *factory.
 	}
 }
 
-func (r *daemonSetRepository) List(ctx context.Context, id int, ns string) (daemonSets []DaemonSet, err error) {
+func (r *daemonSetRepository) List(ctx context.Context, id uint, ns string) (daemonSets []DaemonSet, err error) {
 	var (
 		daemonSet   DaemonSet
 		matchLabels string
@@ -53,12 +52,11 @@ func (r *daemonSetRepository) List(ctx context.Context, id int, ns string) (daem
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.AppsV1().DaemonSets(ns).List(context.TODO(), metav1.ListOptions{
-		TimeoutSeconds: &timeoutSeconds,
+	response, err := client.AppsV1().DaemonSets(ns).List(ctx, metav1.ListOptions{
+		TimeoutSeconds: timeoutSeconds(),
 	})
 	if err != nil {
-		logger.ZapLogger.Error(fmt.Sprintf("kubernetes AppsV1 daemonSet list failed. err: %v1", err))
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 daemonSet list failed. err: %v", err)
 	}
 	for _, item := range response.Items {
 		for k, v := range item.Spec.Selector.MatchLabels {
@@ -79,29 +77,27 @@ func (r *daemonSetRepository) List(ctx context.Context, id int, ns string) (daem
 	return
 }
 
-func (r *daemonSetRepository) Get(ctx context.Context, id int, ns, name string) (*appsv1.DaemonSet, error) {
+func (r *daemonSetRepository) Get(ctx context.Context, id uint, ns, name string) (*appsv1.DaemonSet, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.AppsV1().DaemonSets(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	response, err := client.AppsV1().DaemonSets(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.ZapLogger.Error(fmt.Sprintf("kubernetes AppsV1 daemonSet get failed. err: %v1", err))
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 daemonSet get failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *daemonSetRepository) GetDetail(ctx context.Context, id int, ns, name string) (daemonSet DaemonSet, err error) {
+func (r *daemonSetRepository) GetDetail(ctx context.Context, id uint, ns, name string) (daemonSet DaemonSet, err error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return daemonSet, err
 	}
-	response, err := client.AppsV1().DaemonSets(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	response, err := client.AppsV1().DaemonSets(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.ZapLogger.Error(fmt.Sprintf("kubernetes AppsV1 daemonSet list failed. err: %v1", err))
-		return daemonSet, err
+		return daemonSet, fmt.Errorf("kubernetes AppsV1 daemonSet list failed. err: %v", err)
 	}
 	daemonSet.Namespace = response.Namespace
 	daemonSet.Name = response.Name
@@ -116,43 +112,41 @@ func (r *daemonSetRepository) GetDetail(ctx context.Context, id int, ns, name st
 	return daemonSet, nil
 }
 
-func (r *daemonSetRepository) Create(ctx context.Context, id int, ns string, body *appsv1.DaemonSet) (*appsv1.DaemonSet, error) {
+func (r *daemonSetRepository) Create(ctx context.Context, id uint, ns string, body *appsv1.DaemonSet) (*appsv1.DaemonSet, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.AppsV1().DaemonSets(ns).Create(context.TODO(), body, metav1.CreateOptions{})
+	response, err := client.AppsV1().DaemonSets(ns).Create(ctx, body, metav1.CreateOptions{})
 	if err != nil {
-		logger.ZapLogger.Error(fmt.Sprintf("kubernetes AppsV1 daemonSet get failed. err: %v1", err))
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 daemonSet get failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *daemonSetRepository) Update(ctx context.Context, id int, ns string, body *appsv1.DaemonSet) (*appsv1.DaemonSet, error) {
+func (r *daemonSetRepository) Update(ctx context.Context, id uint, ns string, body *appsv1.DaemonSet) (*appsv1.DaemonSet, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.AppsV1().DaemonSets(ns).Update(context.TODO(), body, metav1.UpdateOptions{})
+	response, err := client.AppsV1().DaemonSets(ns).Update(ctx, body, metav1.UpdateOptions{})
 	if err != nil {
-		logger.ZapLogger.Error(fmt.Sprintf("kubernetes AppsV1 daemonSet update failed. err: %v1", err))
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 daemonSet update failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
 // Delete 删除
-func (r *daemonSetRepository) Delete(ctx context.Context, id int, ns, name string) error {
+func (r *daemonSetRepository) Delete(ctx context.Context, id uint, ns, name string) error {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return err
 	}
-	err = client.AppsV1().DaemonSets(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err = client.AppsV1().DaemonSets(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.ZapLogger.Error(fmt.Sprintf("kubernetes AppsV1 daemonSet delete failed. err: %v1", err))
+		return fmt.Errorf("kubernetes AppsV1 daemonSet delete failed. err: %v", err)
 	}
-	return err
+	return nil
 }

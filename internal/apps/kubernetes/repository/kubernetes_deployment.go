@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"time"
-	"valyria-backend/internal/core/logger"
 	"valyria-backend/internal/pkg/k8s/factory"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -14,15 +13,15 @@ import (
 )
 
 type DeploymentRepository interface {
-	List(ctx context.Context, id int, ns string) ([]Deployment, error)
-	Get(ctx context.Context, id int, ns, name string) (*appsv1.Deployment, error)
-	GetDetail(ctx context.Context, id int, ns, name string) (Deployment, error)
-	Create(ctx context.Context, id int, ns string, deployment *appsv1.Deployment) (*appsv1.Deployment, error)
-	Update(ctx context.Context, id int, ns string, deployment *appsv1.Deployment) (*appsv1.Deployment, error)
-	Delete(ctx context.Context, id int, ns string, name string) error
-	Scale(ctx context.Context, id int, ns string, name string, replicas int32) (*autoscalingv1.Scale, error)
-	Restart(ctx context.Context, id int, ns string, name string) (*appsv1.Deployment, error)
-	Rollout(ctx context.Context, id int, ns string, name, rsName string) (*appsv1.Deployment, error)
+	List(ctx context.Context, id uint, ns string) ([]Deployment, error)
+	Get(ctx context.Context, id uint, ns, name string) (*appsv1.Deployment, error)
+	GetDetail(ctx context.Context, id uint, ns, name string) (Deployment, error)
+	Create(ctx context.Context, id uint, ns string, deployment *appsv1.Deployment) (*appsv1.Deployment, error)
+	Update(ctx context.Context, id uint, ns string, deployment *appsv1.Deployment) (*appsv1.Deployment, error)
+	Delete(ctx context.Context, id uint, ns string, name string) error
+	Scale(ctx context.Context, id uint, ns string, name string, replicas int32) (*autoscalingv1.Scale, error)
+	Restart(ctx context.Context, id uint, ns string, name string) (*appsv1.Deployment, error)
+	Rollout(ctx context.Context, id uint, ns string, name, rsName string) (*appsv1.Deployment, error)
 }
 
 type Deployment struct {
@@ -52,21 +51,20 @@ func NewDeploymentRepository(kubeFactory *KubeConfigFactory, gvkFactory *factory
 	}
 }
 
-func (r *deploymentRepository) List(ctx context.Context, id int, ns string) (deployments []Deployment, err error) {
+func (r *deploymentRepository) List(ctx context.Context, id uint, ns string) (deployments []Deployment, err error) {
 	var (
 		deployment Deployment
 		updatedAt  string
 	)
-	client, err := r.kubeFactory.GetClientSet(ctx, id)
+	client, err := r.kubeFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.AppsV1().Deployments(ns).List(context.TODO(), metav1.ListOptions{
-		TimeoutSeconds: &timeoutSeconds,
+	response, err := client.AppsV1().Deployments(ns).List(ctx, metav1.ListOptions{
+		TimeoutSeconds: timeoutSeconds(),
 	})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 deployments list failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 deployments list failed. err: %v", err)
 	}
 	for _, item := range response.Items {
 		var matchLabels string
@@ -98,15 +96,15 @@ func (r *deploymentRepository) List(ctx context.Context, id int, ns string) (dep
 	return deployments, nil
 }
 
-func (r *deploymentRepository) GetDetail(ctx context.Context, id int, ns, name string) (deployment Deployment, err error) {
+func (r *deploymentRepository) GetDetail(ctx context.Context, id uint, ns, name string) (deployment Deployment, err error) {
 	var updatedAt string
-	client, err := r.kubeFactory.GetClientSet(ctx, id)
+	client, err := r.kubeFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return deployment, err
 	}
-	response, err := client.AppsV1().Deployments(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	response, err := client.AppsV1().Deployments(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 deployment get failed. err: %v", err)
+		return deployment, fmt.Errorf("kubernetes AppsV1 deployment get failed. err: %v", err)
 	}
 
 	// 更新时间
@@ -131,121 +129,112 @@ func (r *deploymentRepository) GetDetail(ctx context.Context, id int, ns, name s
 	return deployment, nil
 }
 
-func (r *deploymentRepository) Get(ctx context.Context, id int, ns, name string) (*appsv1.Deployment, error) {
-	client, err := r.kubeFactory.GetClientSet(ctx, id)
+func (r *deploymentRepository) Get(ctx context.Context, id uint, ns, name string) (*appsv1.Deployment, error) {
+	client, err := r.kubeFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.AppsV1().Deployments(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	response, err := client.AppsV1().Deployments(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 deployment get failed. err: %v", err)
-		return nil, err
-	}
-	r.gvkFactory.Complete(response)
-	return response, nil
-}
-
-func (r *deploymentRepository) Create(ctx context.Context, id int, ns string, deployment *appsv1.Deployment) (*appsv1.Deployment, error) {
-	client, err := r.kubeFactory.GetClientSet(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	response, err := client.AppsV1().Deployments(ns).Create(context.TODO(), deployment, metav1.CreateOptions{})
-	if err != nil {
-		logger.Errorf("kubernetes AppsV1 deployment get failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 deployment get failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *deploymentRepository) Update(ctx context.Context, id int, ns string, deployment *appsv1.Deployment) (*appsv1.Deployment, error) {
-	client, err := r.kubeFactory.GetClientSet(ctx, id)
+func (r *deploymentRepository) Create(ctx context.Context, id uint, ns string, deployment *appsv1.Deployment) (*appsv1.Deployment, error) {
+	client, err := r.kubeFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.AppsV1().Deployments(ns).Update(context.TODO(), deployment, metav1.UpdateOptions{})
+	response, err := client.AppsV1().Deployments(ns).Create(ctx, deployment, metav1.CreateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 deployment update failed. err: %v", err)
+		return nil, fmt.Errorf("kubernetes AppsV1 deployment get failed. err: %v", err)
+	}
+	r.gvkFactory.Complete(response)
+	return response, nil
+}
+
+func (r *deploymentRepository) Update(ctx context.Context, id uint, ns string, deployment *appsv1.Deployment) (*appsv1.Deployment, error) {
+	client, err := r.kubeFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
+	if err != nil {
 		return nil, err
+	}
+	response, err := client.AppsV1().Deployments(ns).Update(ctx, deployment, metav1.UpdateOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("kubernetes AppsV1 deployment update failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
 // Scale 更新副本数量
-func (r *deploymentRepository) Scale(ctx context.Context, id int, ns, name string, replicas int32) (*autoscalingv1.Scale, error) {
-	client, err := r.kubeFactory.GetClientSet(ctx, id)
+func (r *deploymentRepository) Scale(ctx context.Context, id uint, ns, name string, replicas int32) (*autoscalingv1.Scale, error) {
+	client, err := r.kubeFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return nil, err
 	}
 	// 获取副本数量
-	scale, err := client.AppsV1().Deployments(ns).GetScale(context.TODO(), name, metav1.GetOptions{})
+	scale, err := client.AppsV1().Deployments(ns).GetScale(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 deployment get scale failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 deployment get scale failed. err: %v", err)
 	}
 	scale.Spec.Replicas = replicas // 更新副本数量
-	response, err := client.AppsV1().Deployments(ns).UpdateScale(context.TODO(), name, scale, metav1.UpdateOptions{})
+	response, err := client.AppsV1().Deployments(ns).UpdateScale(ctx, name, scale, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 deployment update scale failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 deployment update scale failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *deploymentRepository) Delete(ctx context.Context, id int, ns, name string) error {
-	client, err := r.kubeFactory.GetClientSet(ctx, id)
+func (r *deploymentRepository) Delete(ctx context.Context, id uint, ns, name string) error {
+	client, err := r.kubeFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return err
 	}
-	err = client.AppsV1().Deployments(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err = client.AppsV1().Deployments(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 deployment delete failed. err: %v", err)
+		return fmt.Errorf("kubernetes AppsV1 deployment delete failed. err: %v", err)
 	}
-	return err
+	return nil
 }
 
-func (r *deploymentRepository) Restart(ctx context.Context, id int, ns, name string) (*appsv1.Deployment, error) {
-	client, err := r.kubeFactory.GetClientSet(ctx, id)
+func (r *deploymentRepository) Restart(ctx context.Context, id uint, ns, name string) (*appsv1.Deployment, error) {
+	client, err := r.kubeFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return nil, err
 	}
 	data := fmt.Sprintf(`{"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": "%s"}}}}}`, time.Now().Format("20060102150405"))
 	response, err := client.AppsV1().Deployments(ns).Patch(ctx, name, types.StrategicMergePatchType, []byte(data), metav1.PatchOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 deployment restart failed. err: %v", err)
-
+		return nil, fmt.Errorf("kubernetes AppsV1 deployment restart failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, err
 }
 
-func (r *deploymentRepository) Rollout(ctx context.Context, id int, ns, name, rsName string) (*appsv1.Deployment, error) {
-	client, err := r.kubeFactory.GetClientSet(ctx, id)
+func (r *deploymentRepository) Rollout(ctx context.Context, id uint, ns, name, rsName string) (*appsv1.Deployment, error) {
+	client, err := r.kubeFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return nil, err
 	}
 	// 1. 获取当前 deployment 版本
-	deployment, err := client.AppsV1().Deployments(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	deployment, err := client.AppsV1().Deployments(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 deployment get failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 deployment get failed. err: %v", err)
 	}
 	// 2. 获取当前 deployment 的 rs 版本(在 rs 方法中获取)，并通过 rs 名称找到指定版本
-	replica, err := client.AppsV1().ReplicaSets(ns).Get(context.TODO(), rsName, metav1.GetOptions{})
+	replica, err := client.AppsV1().ReplicaSets(ns).Get(ctx, rsName, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 replicaSet get failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 replicaSet get failed. err: %v", err)
 	}
 	// 3. 替换指定版本 template
 	deployment.Spec.Template = replica.Spec.Template
 	// 4. 执行 deployment 的 update 方法实现回滚
-	response, err := client.AppsV1().Deployments(ns).Update(context.TODO(), deployment, metav1.UpdateOptions{})
+	response, err := client.AppsV1().Deployments(ns).Update(ctx, deployment, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 deployment rollback update failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 deployment rollback update failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil

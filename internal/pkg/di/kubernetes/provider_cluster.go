@@ -11,14 +11,14 @@ import (
 
 type ClusterProvider struct {
 	Repo       *repository.ClusterRepository
-	Service    *service.ClusterService
+	Service    *service.ClusterManager
 	Controller *controller.ClusterController
 }
 
 func NewClusterProvider(db *gorm.DB, encryptor encryption.Encryptor) *ClusterProvider {
 	// 初始化用户模块的依赖
 	repo := repository.NewClusterRepository(db, encryptor)
-	svc := service.NewClusterService(db, repo)
+	svc := service.NewClusterManager(db, repo)
 	ctrl := controller.NewClusterController(svc)
 
 	return &ClusterProvider{

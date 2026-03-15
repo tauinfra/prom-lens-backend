@@ -75,6 +75,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.27.1 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
+	github.com/hashicorp/golang-lru v1.0.2 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20231201235250-de7065d80cb9 // indirect
 	github.com/jackc/pgx/v5 v5.5.5 // indirect
@@ -115,6 +116,7 @@ require (
 	github.com/stoewer/go-strcase v1.3.1 // indirect
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
+	github.com/ua-parser/uap-go v0.0.0-20251207011819-db9adb27a0b8 // indirect
 	github.com/ugorji/go/codec v1.3.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	github.com/xanzy/go-gitlab v0.115.0 // indirect

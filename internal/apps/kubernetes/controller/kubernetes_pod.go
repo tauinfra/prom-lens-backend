@@ -8,8 +8,11 @@ import (
 	"net/http"
 	"strconv"
 	"time"
+	"valyria-backend/internal/apps/kubernetes/repository"
+	"valyria-backend/internal/apps/kubernetes/request"
 	"valyria-backend/internal/apps/kubernetes/service"
 	"valyria-backend/internal/core/logger"
+	"valyria-backend/internal/pkg/ginhelper"
 	"valyria-backend/internal/pkg/k8s/stream"
 
 	"github.com/gin-gonic/gin"
@@ -17,23 +20,52 @@ import (
 	"k8s.io/client-go/tools/remotecommand"
 )
 
+func impersonateCtx(ctx *gin.Context) context.Context {
+	username := ""
+	if v, exists := ctx.Get("username"); exists {
+		if s, ok := v.(string); ok && s != "" {
+			username = s
+		}
+	}
+	return context.WithValue(ctx, repository.ImpersonateUsernameKey, username)
+}
+
 // PodController 定义控制器结构体
 type PodController struct {
-	pod service.PodService // 使用服务接口
+	pod service.PodManager // 使用服务接口
 }
 
 // NewPodController 创建新的 DeploymentsController 实例
-func NewPodController(pod service.PodService) *PodController {
+func NewPodController(pod service.PodManager) *PodController {
 	return &PodController{pod: pod}
 }
 
 func (c *PodController) List(ctx *gin.Context) {
-	var (
-		id, _         = strconv.Atoi(ctx.Param("id"))
-		ns            = ctx.Param("namespace")
-		labelSelector = ctx.Query("labelSelector")
-	)
-	data, err := c.pod.List(ctx, id, ns, labelSelector)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	labelSelector := ctx.Query("labelSelector")
+	data, err := c.pod.List(impersonateCtx(ctx), id, ns, labelSelector)
+	if err != nil {
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data})
+}
+
+// ListAll 集群级别 Pod 列表，支持 fieldSelector、labelSelector；query: labelSelector、fieldSelector
+func (c *PodController) ListAll(ctx *gin.Context) {
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	labelSelector := ctx.Query("labelSelector")
+	fieldSelector := ctx.Query("fieldSelector")
+	data, err := c.pod.ListAll(impersonateCtx(ctx), id, labelSelector, fieldSelector)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
@@ -42,12 +74,14 @@ func (c *PodController) List(ctx *gin.Context) {
 }
 
 func (c *PodController) Get(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-		name  = ctx.Param("name")
-	)
-	data, err := c.pod.Get(ctx, id, ns, name)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	name := ctx.Param("name")
+	data, err := c.pod.Get(impersonateCtx(ctx), id, ns, name)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
@@ -56,12 +90,14 @@ func (c *PodController) Get(ctx *gin.Context) {
 }
 
 func (c *PodController) GetDetail(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-		name  = ctx.Param("name")
-	)
-	data, err := c.pod.GetDetail(ctx, id, ns, name)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	name := ctx.Param("name")
+	data, err := c.pod.GetDetail(impersonateCtx(ctx), id, ns, name)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
@@ -69,17 +105,53 @@ func (c *PodController) GetDetail(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data})
 }
 
+func (c *PodController) Delete(ctx *gin.Context) {
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	name := ctx.Param("name")
+	if err := c.pod.Delete(impersonateCtx(ctx), id, ns, name); err != nil {
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
+}
+
+func (c *PodController) DeleteBatch(ctx *gin.Context) {
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	var req request.BatchDeletePodRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
+		return
+	}
+	if err := c.pod.DeleteBatch(impersonateCtx(ctx), id, ns, &req); err != nil {
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
+}
+
 func (c *PodController) GetLogs(ctx *gin.Context) {
-	var (
-		id, _           = strconv.Atoi(ctx.Param("id"))
-		namespace       = ctx.Param("namespace")
-		name            = ctx.Param("name")
-		container       = ctx.Param("container")
-		sinceSeconds    = time.Now().Unix()
-		tailLinesString = ctx.Query("tailLines")
-		followString    = ctx.Query("follow")
-		token           = ctx.GetHeader("Sec-Websocket-Protocol")
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	namespace := ctx.Param("namespace")
+	name := ctx.Param("name")
+	container := ctx.Param("container")
+	sinceSeconds := time.Now().Unix()
+	tailLinesString := ctx.Query("tailLines")
+	followString := ctx.Query("follow")
+	token := ctx.GetHeader("Sec-Websocket-Protocol")
 	// 解析 tailLines (int64)
 	tailLines, err := strconv.ParseInt(tailLinesString, 10, 64)
 	if err != nil {
@@ -101,7 +173,7 @@ func (c *PodController) GetLogs(ctx *gin.Context) {
 		return
 	}
 	// 调用服务层，获取日志流
-	stream, cancel, err := c.pod.GetLogs(ctx, id, namespace, name, container, follow, &tailLines, &sinceSeconds)
+	stream, cancel, err := c.pod.GetLogs(impersonateCtx(ctx), id, namespace, name, container, follow, &tailLines, &sinceSeconds)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -163,15 +235,17 @@ func (c *PodController) GetLogs(ctx *gin.Context) {
 }
 
 func (c *PodController) GetTailLogs(ctx *gin.Context) {
-	var (
-		id, _           = strconv.Atoi(ctx.Param("id"))
-		namespace       = ctx.Param("namespace")
-		name            = ctx.Param("name")
-		container       = ctx.Param("container")
-		sinceSeconds    = time.Now().Unix()
-		tailLinesString = ctx.Query("tailLines")
-		followString    = ctx.Query("follow")
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	namespace := ctx.Param("namespace")
+	name := ctx.Param("name")
+	container := ctx.Param("container")
+	sinceSeconds := time.Now().Unix()
+	tailLinesString := ctx.Query("tailLines")
+	followString := ctx.Query("follow")
 	// 解析 tailLines (int64)
 	tailLines, err := strconv.ParseInt(tailLinesString, 10, 64)
 	if err != nil {
@@ -192,9 +266,10 @@ func (c *PodController) GetTailLogs(ctx *gin.Context) {
 		})
 		return
 	}
-	goCtx, cancel := context.WithTimeout(ctx, 1*time.Minute)
-	defer cancel()
-	stream, cancel, err := c.pod.GetLogs(goCtx, id, namespace, name, container, follow, &tailLines, &sinceSeconds)
+	reqCtx := impersonateCtx(ctx)
+	goCtx, cancelTimeout := context.WithTimeout(reqCtx, 1*time.Minute)
+	defer cancelTimeout()
+	stream, cancelStream, err := c.pod.GetLogs(goCtx, id, namespace, name, container, follow, &tailLines, &sinceSeconds)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -203,6 +278,7 @@ func (c *PodController) GetTailLogs(ctx *gin.Context) {
 		})
 		return
 	}
+	defer cancelStream()
 	defer stream.Close()
 
 	// 设置响应头
@@ -278,20 +354,24 @@ func (c *PodController) GetTailLogs(ctx *gin.Context) {
 }
 
 func (c *PodController) Executor(ctx *gin.Context) {
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	namespace := ctx.Param("namespace")
+	name := ctx.Param("name")
+	container := ctx.Param("container")
+	cols, _ := strconv.Atoi(ctx.Query("cols"))
+	rows, _ := strconv.Atoi(ctx.Query("rows"))
+	token := ctx.GetHeader("Sec-Websocket-Protocol")
 	var (
-		wsConn    *stream.WsConnection
-		executor  remotecommand.Executor
-		handler   *stream.StreamHandler
-		id, _     = strconv.Atoi(ctx.Param("id"))
-		namespace = ctx.Param("namespace")
-		name      = ctx.Param("name")
-		container = ctx.Param("container")
-		cols, _   = strconv.Atoi(ctx.Query("cols"))
-		rows, _   = strconv.Atoi(ctx.Query("rows"))
-		token     = ctx.GetHeader("Sec-Websocket-Protocol")
+		wsConn   *stream.WsConnection
+		executor remotecommand.Executor
+		handler  *stream.StreamHandler
 	)
 	// 创建执行器
-	executor, err := c.pod.Executor(ctx, id, namespace, name, container)
+	executor, err := c.pod.Executor(impersonateCtx(ctx), id, namespace, name, container)
 	if err != nil {
 		logger.Errorf("kubernetes pod '%v' container '%v' executor creation failed, err: %v", name, container, err)
 		ctx.Status(http.StatusInternalServerError)
@@ -313,17 +393,18 @@ func (c *PodController) Executor(ctx *gin.Context) {
 		WsConn:      wsConn,
 		ResizeEvent: make(chan remotecommand.TerminalSize, 1),
 	}
+	defer close(handler.ResizeEvent) // 避免 goroutine 泄漏
 
 	// 发送初始终端大小
 	if cols > 0 && rows > 0 {
-		select {
-		case handler.ResizeEvent <- remotecommand.TerminalSize{Width: uint16(cols), Height: uint16(rows)}:
-		default:
+		handler.ResizeEvent <- remotecommand.TerminalSize{
+			Width:  uint16(cols),
+			Height: uint16(rows),
 		}
 	}
 
 	// 执行远程命令
-	err = executor.StreamWithContext(ctx, remotecommand.StreamOptions{
+	err = executor.StreamWithContext(ctx.Request.Context(), remotecommand.StreamOptions{
 		Stdin:             handler,
 		Stdout:            handler,
 		Stderr:            handler,
@@ -337,15 +418,17 @@ func (c *PodController) Executor(ctx *gin.Context) {
 }
 
 func (c *PodController) DebugExecutor(ctx *gin.Context) {
-	var (
-		id, _     = strconv.Atoi(ctx.Param("id"))
-		namespace = ctx.Param("namespace")
-		name      = ctx.Param("name")
-		container = ctx.Param("container")
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	namespace := ctx.Param("namespace")
+	name := ctx.Param("name")
+	container := ctx.Param("container")
 
 	// 测试命令
-	if err := c.pod.DebugExecutor(ctx, id, namespace, name, container); err != nil {
+	if err := c.pod.DebugExecutor(impersonateCtx(ctx), id, namespace, name, container); err != nil {
 		logger.Errorf("DebugExecutor connection failed, error: %v\n", err)
 	}
 }

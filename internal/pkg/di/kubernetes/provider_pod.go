@@ -9,14 +9,14 @@ import (
 
 type PodProvider struct {
 	Repo       *repository.PodRepository
-	Service    *service.PodService
+	Service    *service.PodManager
 	Controller *controller.PodController
 }
 
 func NewPodProvider(cfgFactory *repository.KubeConfigFactory, gvkFactory *factory.GVKFactory) *PodProvider {
 	// 初始化用户模块的依赖
 	repo := repository.NewPodRepository(cfgFactory, gvkFactory)
-	svc := service.NewPodService(repo)
+	svc := service.NewPodManager(repo)
 	ctrl := controller.NewPodController(svc)
 
 	return &PodProvider{

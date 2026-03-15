@@ -2,8 +2,8 @@ package controller
 
 import (
 	"net/http"
-	"strconv"
 	"valyria-backend/internal/apps/kubernetes/service"
+	"valyria-backend/internal/pkg/ginhelper"
 
 	"github.com/gin-gonic/gin"
 	corev1 "k8s.io/api/core/v1"
@@ -20,9 +20,11 @@ func NewPersistentVolumeController(persistentVolume service.PersistentVolumeMana
 }
 
 func (c *PersistentVolumeController) List(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
 	data, err := c.persistentVolume.List(ctx, id)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
@@ -32,10 +34,12 @@ func (c *PersistentVolumeController) List(ctx *gin.Context) {
 }
 
 func (c *PersistentVolumeController) Get(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		name  = ctx.Param("name")
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	name := ctx.Param("name")
 	data, err := c.persistentVolume.Get(ctx, id, name)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
@@ -45,29 +49,34 @@ func (c *PersistentVolumeController) Get(ctx *gin.Context) {
 }
 
 func (c *PersistentVolumeController) Create(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		body  = &corev1.PersistentVolume{}
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	body := &corev1.PersistentVolume{}
 	// 绑定数据
 	if err := ctx.ShouldBindJSON(&body); err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
+		return
 	}
 	// 创建
-	data, err := c.persistentVolume.Create(ctx, id, body)
+	_, err := c.persistentVolume.Create(ctx, id, body)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data})
+	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
 }
 
 func (c *PersistentVolumeController) Update(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		name  = ctx.Param("name")
-		body  = &corev1.PersistentVolume{}
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	name := ctx.Param("name")
+	body := &corev1.PersistentVolume{}
 	// 绑定数据
 	if err := ctx.ShouldBindJSON(&body); err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
@@ -75,23 +84,36 @@ func (c *PersistentVolumeController) Update(ctx *gin.Context) {
 	}
 	// 更新
 	body.Name = name
-	data, err := c.persistentVolume.Update(ctx, id, body)
+	_, err := c.persistentVolume.Update(ctx, id, body)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data})
+	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
 }
 
 func (c *PersistentVolumeController) Delete(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		name  = ctx.Param("name")
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	name := ctx.Param("name")
 	err := c.persistentVolume.Delete(ctx, id, name)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
+}
+
+func (c *PersistentVolumeController) DeleteBatch(ctx *gin.Context) {
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	deleteBatchByNames(ctx, func(name string) error {
+		return c.persistentVolume.Delete(ctx, id, name)
+	})
 }

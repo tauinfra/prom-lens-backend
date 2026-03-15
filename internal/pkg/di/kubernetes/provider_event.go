@@ -8,14 +8,14 @@ import (
 
 type EventProvider struct {
 	Repo       *repository.EventRepository
-	Service    *service.EventService
+	Service    *service.EventManager
 	Controller *controller.EventController
 }
 
 func NewEventProvider(cfgFactory *repository.KubeConfigFactory) *EventProvider {
 	// 初始化用户模块的依赖
 	repo := repository.NewEventRepository(cfgFactory)
-	svc := service.NewEventService(repo)
+	svc := service.NewEventManager(repo)
 	ctrl := controller.NewEventController(svc)
 
 	return &EventProvider{

@@ -14,6 +14,7 @@ type Container struct {
 	Ready        bool   `json:"ready"`
 	State        string `json:"state"`
 	RestartCount int32  `json:"restartCount"`
+	StartedAt    string `json:"startedAt,omitempty"`
 	ContainerID  string `json:"containerID"`
 }
 
@@ -50,7 +51,7 @@ func (h *PodHelper) GetMaxReadyCount(pod corev1.Pod) int {
 	maxReadyCount := 0
 	for _, containerStatus := range pod.Status.ContainerStatuses {
 		if containerStatus.Ready {
-			maxReadyCount = +1
+			maxReadyCount += 1
 		}
 	}
 	return maxReadyCount
@@ -76,10 +77,17 @@ func (h *PodHelper) GetContainerState(cs corev1.ContainerStatus) string {
 func (h *PodHelper) GetContainerStatuses(pod corev1.Pod) []Container {
 	var containers []Container
 	for _, cs := range pod.Status.ContainerStatuses {
+		startedAt := ""
+		if cs.State.Running != nil && !cs.State.Running.StartedAt.IsZero() {
+			startedAt = cs.State.Running.StartedAt.Time.Format("2006-01-02 15:04:05")
+		} else if cs.State.Terminated != nil && !cs.State.Terminated.StartedAt.IsZero() {
+			startedAt = cs.State.Terminated.StartedAt.Time.Format("2006-01-02 15:04:05")
+		}
 		container := Container{
 			Name:         cs.Name,
 			Ready:        cs.Ready,
 			RestartCount: cs.RestartCount,
+			StartedAt:    startedAt,
 			Image:        cs.Image,
 			ImageID:      cs.ImageID,
 			ContainerID:  cs.ContainerID,

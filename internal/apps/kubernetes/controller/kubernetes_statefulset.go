@@ -2,8 +2,9 @@ package controller
 
 import (
 	"net/http"
-	"strconv"
+	"valyria-backend/internal/apps/kubernetes/request"
 	"valyria-backend/internal/apps/kubernetes/service"
+	"valyria-backend/internal/pkg/ginhelper"
 
 	"github.com/gin-gonic/gin"
 	appsv1 "k8s.io/api/apps/v1"
@@ -11,19 +12,21 @@ import (
 
 // StatefulSetController 定义控制器结构体
 type StatefulSetController struct {
-	statefulSet service.StatefulSetService // 使用服务接口
+	statefulSet service.StatefulSetManager // 使用服务接口
 }
 
 // NewStatefulSetController 创建新的 StatefulSetController 实例
-func NewStatefulSetController(statefulSet service.StatefulSetService) *StatefulSetController {
+func NewStatefulSetController(statefulSet service.StatefulSetManager) *StatefulSetController {
 	return &StatefulSetController{statefulSet: statefulSet}
 }
 
 func (c *StatefulSetController) List(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
 	data, err := c.statefulSet.List(ctx, id, ns)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
@@ -33,11 +36,13 @@ func (c *StatefulSetController) List(ctx *gin.Context) {
 }
 
 func (c *StatefulSetController) Get(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-		name  = ctx.Param("name")
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	name := ctx.Param("name")
 	data, err := c.statefulSet.Get(ctx, id, ns, name)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
@@ -47,11 +52,13 @@ func (c *StatefulSetController) Get(ctx *gin.Context) {
 }
 
 func (c *StatefulSetController) GetDetail(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-		name  = ctx.Param("name")
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	name := ctx.Param("name")
 	data, err := c.statefulSet.GetDetail(ctx, id, ns, name)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
@@ -61,52 +68,60 @@ func (c *StatefulSetController) GetDetail(ctx *gin.Context) {
 }
 
 func (c *StatefulSetController) Create(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-		body  = &appsv1.StatefulSet{}
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	body := &appsv1.StatefulSet{}
 	// 绑定数据
 	if err := ctx.ShouldBindJSON(&body); err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
+		return
 	}
 	// 创建
-	data, err := c.statefulSet.Create(ctx, id, ns, body)
+	_, err := c.statefulSet.Create(ctx, id, ns, body)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data})
+	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
 }
 
 func (c *StatefulSetController) Update(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-		name  = ctx.Param("name")
-		body  = &appsv1.StatefulSet{}
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	name := ctx.Param("name")
+	body := &appsv1.StatefulSet{}
 	// 绑定数据
 	if err := ctx.ShouldBindJSON(&body); err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
+		return
 	}
 	// 更新
 	body.Name = name
 	body.Namespace = ns
-	data, err := c.statefulSet.Update(ctx, id, ns, body)
+	_, err := c.statefulSet.Update(ctx, id, ns, body)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data})
+	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
 }
 
 func (c *StatefulSetController) Delete(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-		name  = ctx.Param("name")
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	name := ctx.Param("name")
 	err := c.statefulSet.Delete(ctx, id, ns, name)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
@@ -115,13 +130,34 @@ func (c *StatefulSetController) Delete(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
 }
 
+func (c *StatefulSetController) DeleteBatch(ctx *gin.Context) {
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	var req request.BatchDeleteWorkloadRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
+		return
+	}
+	if err := c.statefulSet.DeleteBatch(ctx, id, ns, &req); err != nil {
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
+		return
+	}
+	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
+}
+
 func (c *StatefulSetController) Scale(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-		name  = ctx.Param("name")
-		scale Scale
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	name := ctx.Param("name")
+	var scale request.ScaleRequest
 	if err := ctx.ShouldBindJSON(&scale); err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
@@ -136,11 +172,13 @@ func (c *StatefulSetController) Scale(ctx *gin.Context) {
 }
 
 func (c *StatefulSetController) Restart(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-		name  = ctx.Param("name")
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	name := ctx.Param("name")
 	// 重启
 	data, err := c.statefulSet.Restart(ctx, id, ns, name)
 	if err != nil {

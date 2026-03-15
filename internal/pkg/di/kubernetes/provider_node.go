@@ -9,14 +9,14 @@ import (
 
 type NodeProvider struct {
 	Repo       *repository.NodeRepository
-	Service    *service.NodeService
+	Service    *service.NodeManager
 	Controller *controller.NodeController
 }
 
 func NewNodeProvider(cfgFactory *repository.KubeConfigFactory, gvkFactory *factory.GVKFactory) *NodeProvider {
 	// 初始化用户模块的依赖
 	repo := repository.NewNodeRepository(cfgFactory, gvkFactory)
-	svc := service.NewNodeService(repo)
+	svc := service.NewNodeManager(repo)
 	ctrl := controller.NewNodeController(svc)
 
 	return &NodeProvider{

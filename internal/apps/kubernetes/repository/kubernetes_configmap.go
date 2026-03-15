@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"valyria-backend/internal/core/logger"
+	"fmt"
 	"valyria-backend/internal/pkg/k8s/factory"
 
 	corev1 "k8s.io/api/core/v1"
@@ -10,11 +10,11 @@ import (
 )
 
 type ConfigmapRepository interface {
-	List(ctx context.Context, id int, ns string) ([]ConfigMap, error)
-	Get(ctx context.Context, id int, ns, name string) (*corev1.ConfigMap, error)
-	Create(ctx context.Context, id int, ns string, configMap *corev1.ConfigMap) (*corev1.ConfigMap, error)
-	Update(ctx context.Context, id int, ns string, configMap *corev1.ConfigMap) (*corev1.ConfigMap, error)
-	Delete(ctx context.Context, id int, ns, name string) error
+	List(ctx context.Context, id uint, ns string) ([]ConfigMap, error)
+	Get(ctx context.Context, id uint, ns, name string) (*corev1.ConfigMap, error)
+	Create(ctx context.Context, id uint, ns string, configMap *corev1.ConfigMap) (*corev1.ConfigMap, error)
+	Update(ctx context.Context, id uint, ns string, configMap *corev1.ConfigMap) (*corev1.ConfigMap, error)
+	Delete(ctx context.Context, id uint, ns, name string) error
 }
 
 type ConfigMap struct {
@@ -35,18 +35,17 @@ func NewConfigmapRepository(cfgFactory *KubeConfigFactory, gvkFactory *factory.G
 	}
 }
 
-func (r *configmapRepository) List(ctx context.Context, id int, ns string) (configmaps []ConfigMap, err error) {
+func (r *configmapRepository) List(ctx context.Context, id uint, ns string) (configmaps []ConfigMap, err error) {
 	var configmap ConfigMap
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.CoreV1().ConfigMaps(ns).List(context.TODO(), metav1.ListOptions{
-		TimeoutSeconds: &timeoutSeconds,
+	response, err := client.CoreV1().ConfigMaps(ns).List(ctx, metav1.ListOptions{
+		TimeoutSeconds: timeoutSeconds(),
 	})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 configmaps list failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 configmaps list failed. err: %v", err)
 	}
 	for _, item := range response.Items {
 		configmap.Name = item.Name
@@ -57,57 +56,53 @@ func (r *configmapRepository) List(ctx context.Context, id int, ns string) (conf
 	return configmaps, nil
 }
 
-func (r *configmapRepository) Get(ctx context.Context, id int, ns, name string) (*corev1.ConfigMap, error) {
+func (r *configmapRepository) Get(ctx context.Context, id uint, ns, name string) (*corev1.ConfigMap, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.CoreV1().ConfigMaps(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	response, err := client.CoreV1().ConfigMaps(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 configmap get failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 configmap get failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *configmapRepository) Create(ctx context.Context, id int, ns string, configMap *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+func (r *configmapRepository) Create(ctx context.Context, id uint, ns string, configMap *corev1.ConfigMap) (*corev1.ConfigMap, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.CoreV1().ConfigMaps(ns).Update(context.TODO(), configMap, metav1.UpdateOptions{})
+	response, err := client.CoreV1().ConfigMaps(ns).Update(ctx, configMap, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 configmaps create failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 configmaps create failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *configmapRepository) Update(ctx context.Context, id int, ns string, configMap *corev1.ConfigMap) (*corev1.ConfigMap, error) {
+func (r *configmapRepository) Update(ctx context.Context, id uint, ns string, configMap *corev1.ConfigMap) (*corev1.ConfigMap, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.CoreV1().ConfigMaps(ns).Update(context.TODO(), configMap, metav1.UpdateOptions{})
+	response, err := client.CoreV1().ConfigMaps(ns).Update(ctx, configMap, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 configmaps update failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 configmaps update failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *configmapRepository) Delete(ctx context.Context, id int, ns, name string) error {
+func (r *configmapRepository) Delete(ctx context.Context, id uint, ns, name string) error {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return err
 	}
-	err = client.CoreV1().ConfigMaps(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err = client.CoreV1().ConfigMaps(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 configmap delete failed. err: %v", err)
-		return err
+		return fmt.Errorf("kubernetes CoreV1 configmap delete failed. err: %v", err)
 	}
 	return nil
 }

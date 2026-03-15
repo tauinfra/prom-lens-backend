@@ -1,20 +1,15 @@
 package routes
 
 import (
+	"valyria-backend/internal/pkg/di"
+
 	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
-	controller2 "valyria-backend/internal/apps/audit/controller"
 )
 
-func AuditRouters(tx *gorm.DB, r *gin.Engine) {
-	// Audit Routes
-	var authLog = controller2.SetupAuthLogController(tx)
-	var auditLog = controller2.SetupAuditLogController(tx)
-	AuditRouters := r.Group("/api/v1/audit")
+func AuditRouters(rg *gin.RouterGroup, provider *di.Provider) {
+	audit := rg.Group("/audit")
 	{
-		AuditRouters.GET("/auth-logs", authLog.List)
-	}
-	{
-		AuditRouters.GET("/logs", auditLog.List)
+		audit.GET("/auth-logs", provider.Audit.AuthLog.Controller.List)
+		audit.GET("/logs", provider.Audit.AuditLog.Controller.List)
 	}
 }

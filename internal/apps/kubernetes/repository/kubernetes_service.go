@@ -4,24 +4,23 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"valyria-backend/internal/core/logger"
 	"valyria-backend/internal/pkg/k8s/factory"
 
-	corv1 "k8s.io/api/core/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type ServiceRepository interface {
-	List(ctx context.Context, id int, ns, labelSelector string) (services []Service, err error)
-	Get(ctx context.Context, id int, ns, name string) (*corv1.Service, error)
-	Create(ctx context.Context, id int, ns string, body *corv1.Service) (*corv1.Service, error)
-	Update(ctx context.Context, id int, ns string, body *corv1.Service) (*corv1.Service, error)
-	Delete(ctx context.Context, id int, ns, name string) error
+	List(ctx context.Context, id uint, ns, labelSelector string) (services []Service, err error)
+	Get(ctx context.Context, id uint, ns, name string) (*corev1.Service, error)
+	Create(ctx context.Context, id uint, ns string, body *corev1.Service) (*corev1.Service, error)
+	Update(ctx context.Context, id uint, ns string, body *corev1.Service) (*corev1.Service, error)
+	Delete(ctx context.Context, id uint, ns, name string) error
 }
 
 type Service struct {
 	Name      string            `json:"name,omitempty"`
-	Type      corv1.ServiceType `json:"type,omitempty"`
+	Type      corev1.ServiceType `json:"type,omitempty"`
 	ClusterIP string            `json:"clusterIP,omitempty"`
 	Ports     string            `json:"ports,omitempty"`
 	CreatedAt string            `json:"createdAt,omitempty"`
@@ -39,18 +38,17 @@ func NewServiceRepository(cfgFactory *KubeConfigFactory, gvkFactory *factory.GVK
 	}
 }
 
-func (r *serviceRepository) List(ctx context.Context, id int, ns, labelSelector string) (services []Service, err error) {
+func (r *serviceRepository) List(ctx context.Context, id uint, ns, labelSelector string) (services []Service, err error) {
 	var service Service
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.CoreV1().Services(ns).List(context.TODO(), metav1.ListOptions{
+	response, err := client.CoreV1().Services(ns).List(ctx, metav1.ListOptions{
 		LabelSelector: labelSelector,
 	})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 service list failed. err: %v", err)
-		return services, err
+		return services, fmt.Errorf("kubernetes CoreV1 service list failed. err: %v", err)
 	}
 	for _, item := range response.Items {
 		var ports string
@@ -73,56 +71,53 @@ func (r *serviceRepository) List(ctx context.Context, id int, ns, labelSelector 
 	return services, nil
 }
 
-func (r *serviceRepository) Get(ctx context.Context, id int, ns, name string) (*corv1.Service, error) {
+func (r *serviceRepository) Get(ctx context.Context, id uint, ns, name string) (*corev1.Service, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.CoreV1().Services(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	response, err := client.CoreV1().Services(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 service get failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 service get failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *serviceRepository) Create(ctx context.Context, id int, ns string, body *corv1.Service) (*corv1.Service, error) {
+func (r *serviceRepository) Create(ctx context.Context, id uint, ns string, body *corev1.Service) (*corev1.Service, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.CoreV1().Services(ns).Create(context.TODO(), body, metav1.CreateOptions{})
+	response, err := client.CoreV1().Services(ns).Create(ctx, body, metav1.CreateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 service create failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 service create failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *serviceRepository) Update(ctx context.Context, id int, ns string, body *corv1.Service) (*corv1.Service, error) {
+func (r *serviceRepository) Update(ctx context.Context, id uint, ns string, body *corev1.Service) (*corev1.Service, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.CoreV1().Services(ns).Update(context.TODO(), body, metav1.UpdateOptions{})
+	response, err := client.CoreV1().Services(ns).Update(ctx, body, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 service update failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 service update failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *serviceRepository) Delete(ctx context.Context, id int, ns, name string) error {
+func (r *serviceRepository) Delete(ctx context.Context, id uint, ns, name string) error {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return err
 	}
-	err = client.CoreV1().Services(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err = client.CoreV1().Services(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 service update failed. err: %v", err)
+		return fmt.Errorf("kubernetes CoreV1 service update failed. err: %v", err)
 	}
-	return err
+	return nil
 }

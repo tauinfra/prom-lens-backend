@@ -2,23 +2,28 @@ package service
 
 import (
 	"context"
+	"valyria-backend/internal/apps/kubernetes/dto"
 	"valyria-backend/internal/apps/kubernetes/repository"
 )
 
-// EventService 定义接口
-type EventService interface {
-	List(ctx context.Context, id int, ns, kind, name string) (events []repository.Event, err error)
+// EventManager 定义接口
+type EventManager interface {
+	List(ctx context.Context, id uint, ns, kind, name string) (events []dto.Event, err error)
 }
 
-type eventService struct {
+type eventManager struct {
 	event repository.EventRepository
 }
 
-func NewEventService(event repository.EventRepository) EventService {
-	return &eventService{event: event}
+func NewEventManager(event repository.EventRepository) EventManager {
+	return &eventManager{event: event}
 }
 
 // List 列表
-func (s *eventService) List(ctx context.Context, id int, ns, kind, name string) (events []repository.Event, err error) {
-	return s.event.List(ctx, id, ns, kind, name)
+func (s *eventManager) List(ctx context.Context, id uint, ns, kind, name string) (events []dto.Event, err error) {
+	items, err := s.event.List(ctx, id, ns, kind, name)
+	if err != nil {
+		return nil, err
+	}
+	return dto.ToEventDTOs(items), nil
 }

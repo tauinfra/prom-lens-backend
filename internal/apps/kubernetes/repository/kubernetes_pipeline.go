@@ -2,18 +2,19 @@ package repository
 
 import (
 	"context"
-	"valyria-backend/internal/core/logger"
+	"fmt"
 	"valyria-backend/internal/pkg/k8s/factory"
+
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 type PipelineRepository interface {
-	List(ctx context.Context, id int, ns string) (Pipelines []Pipeline, err error)
-	Get(ctx context.Context, id int, ns, name string) (*v1.Pipeline, error)
-	Create(ctx context.Context, id int, ns string, body *v1.Pipeline) (*v1.Pipeline, error)
-	Update(ctx context.Context, id int, ns string, body *v1.Pipeline) (*v1.Pipeline, error)
-	Delete(ctx context.Context, id int, ns, name string) error
+	List(ctx context.Context, id uint, ns string) (Pipelines []Pipeline, err error)
+	Get(ctx context.Context, id uint, ns, name string) (*v1.Pipeline, error)
+	Create(ctx context.Context, id uint, ns string, body *v1.Pipeline) (*v1.Pipeline, error)
+	Update(ctx context.Context, id uint, ns string, body *v1.Pipeline) (*v1.Pipeline, error)
+	Delete(ctx context.Context, id uint, ns, name string) error
 }
 
 type Pipeline struct {
@@ -34,16 +35,15 @@ func NewPipelineRepository(cfgFactory *KubeConfigFactory, gvkFactory *factory.GV
 	}
 }
 
-func (r *pipelineRepository) List(ctx context.Context, id int, ns string) (pipelines []Pipeline, err error) {
+func (r *pipelineRepository) List(ctx context.Context, id uint, ns string) (pipelines []Pipeline, err error) {
 	var pipeline Pipeline
 	client, err := r.cfgFactory.GetTektonClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.TektonV1().Pipelines(ns).List(context.TODO(), metav1.ListOptions{})
+	response, err := client.TektonV1().Pipelines(ns).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes TektonV1 Pipeline list failed. err: %v", err)
-		return pipelines, err
+		return pipelines, fmt.Errorf("kubernetes TektonV1 Pipeline list failed. err: %v", err)
 	}
 	for _, item := range response.Items {
 		pipeline.Namespace = item.Namespace
@@ -54,56 +54,53 @@ func (r *pipelineRepository) List(ctx context.Context, id int, ns string) (pipel
 	return pipelines, nil
 }
 
-func (r *pipelineRepository) Get(ctx context.Context, id int, ns, name string) (*v1.Pipeline, error) {
+func (r *pipelineRepository) Get(ctx context.Context, id uint, ns, name string) (*v1.Pipeline, error) {
 	client, err := r.cfgFactory.GetTektonClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.TektonV1().Pipelines(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	response, err := client.TektonV1().Pipelines(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes TektonV1 Pipeline get failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes TektonV1 Pipeline get failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *pipelineRepository) Create(ctx context.Context, id int, ns string, body *v1.Pipeline) (*v1.Pipeline, error) {
+func (r *pipelineRepository) Create(ctx context.Context, id uint, ns string, body *v1.Pipeline) (*v1.Pipeline, error) {
 	client, err := r.cfgFactory.GetTektonClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.TektonV1().Pipelines(ns).Create(context.TODO(), body, metav1.CreateOptions{})
+	response, err := client.TektonV1().Pipelines(ns).Create(ctx, body, metav1.CreateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes TektonV1 Pipeline create failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes TektonV1 Pipeline create failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *pipelineRepository) Update(ctx context.Context, id int, ns string, body *v1.Pipeline) (*v1.Pipeline, error) {
+func (r *pipelineRepository) Update(ctx context.Context, id uint, ns string, body *v1.Pipeline) (*v1.Pipeline, error) {
 	client, err := r.cfgFactory.GetTektonClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.TektonV1().Pipelines(ns).Update(context.TODO(), body, metav1.UpdateOptions{})
+	response, err := client.TektonV1().Pipelines(ns).Update(ctx, body, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 Pipeline update failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 Pipeline update failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *pipelineRepository) Delete(ctx context.Context, id int, ns, name string) error {
+func (r *pipelineRepository) Delete(ctx context.Context, id uint, ns, name string) error {
 	client, err := r.cfgFactory.GetTektonClientSet(ctx, id)
 	if err != nil {
 		return err
 	}
-	err = client.TektonV1().Pipelines(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err = client.TektonV1().Pipelines(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes TektonV1 Pipeline update failed. err: %v", err)
+		return fmt.Errorf("kubernetes TektonV1 Pipeline update failed. err: %v", err)
 	}
-	return err
+	return nil
 }

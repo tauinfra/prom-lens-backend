@@ -5,25 +5,25 @@ import (
 	"fmt"
 	"io"
 	"strings"
-	"valyria-backend/internal/core/logger"
 	"valyria-backend/internal/pkg/k8s/factory"
 	"valyria-backend/internal/pkg/k8s/helper"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/remotecommand"
 )
 
 type PodRepository interface {
-	List(ctx context.Context, id int, ns, labelSelector string) ([]Pod, error)
-	Get(ctx context.Context, id int, ns, name string) (pod *corev1.Pod, err error)
-	GetDetail(ctx context.Context, id int, ns, name string) (Pod, error)
-	GetLogs(ctx context.Context, id int, ns, name, container string, follow bool, tailLines, sinceSeconds *int64) (io.ReadCloser, context.CancelFunc, error)
-	Delete(ctx context.Context, id int, ns, name string) error
-	Executor(ctx context.Context, id int, ns, name, container string) (remotecommand.Executor, error)
-	DebugExecutor(ctx context.Context, id int, ns, name, container string) (remotecommand.Executor, error)
+	List(ctx context.Context, id uint, ns, labelSelector string) ([]Pod, error)
+	// ListAll 集群级别 Pod 列表，支持 labelSelector / fieldSelector
+	ListAll(ctx context.Context, id uint, labelSelector, fieldSelector string) ([]Pod, error)
+	Get(ctx context.Context, id uint, ns, name string) (pod *corev1.Pod, err error)
+	GetDetail(ctx context.Context, id uint, ns, name string) (Pod, error)
+	GetLogs(ctx context.Context, id uint, ns, name, container string, follow bool, tailLines, sinceSeconds *int64) (io.ReadCloser, context.CancelFunc, error)
+	Delete(ctx context.Context, id uint, ns, name string) error
+	Executor(ctx context.Context, id uint, ns, name, container string) (remotecommand.Executor, error)
+	DebugExecutor(ctx context.Context, id uint, ns, name, container string) (remotecommand.Executor, error)
 }
 
 type Pod struct {
@@ -62,23 +62,21 @@ func NewPodRepository(cfgFactory *KubeConfigFactory, gvkFactory *factory.GVKFact
 	}
 }
 
-func (r *podRepository) List(ctx context.Context, id int, ns, labelSelector string) (pods []Pod, err error) {
-	var pod Pod
-	var client *kubernetes.Clientset
-	client, err = r.cfgFactory.GetClientSet(ctx, id)
+func (r *podRepository) List(ctx context.Context, id uint, ns, labelSelector string) (pods []Pod, err error) {
+	client, err := r.cfgFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return nil, err
 	}
 	podHelper := helper.NewPodHelper()
 
-	response, err := client.CoreV1().Pods(ns).List(context.TODO(), metav1.ListOptions{
+	response, err := client.CoreV1().Pods(ns).List(ctx, metav1.ListOptions{
 		LabelSelector: labelSelector,
 	})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 pods list failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 pods list failed. err: %v", err)
 	}
 	for _, item := range response.Items {
+		var pod Pod
 		pod.Namespace = item.Namespace
 		pod.Name = item.Name
 		pod.PodIP = item.Status.PodIP
@@ -95,29 +93,59 @@ func (r *podRepository) List(ctx context.Context, id int, ns, labelSelector stri
 	return pods, nil
 }
 
-func (r *podRepository) Get(ctx context.Context, id int, ns, name string) (pod *corev1.Pod, err error) {
-	client, err := r.cfgFactory.GetClientSet(ctx, id)
+func (r *podRepository) ListAll(ctx context.Context, id uint, labelSelector, fieldSelector string) (pods []Pod, err error) {
+	client, err := r.cfgFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.CoreV1().Pods(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	podHelper := helper.NewPodHelper()
+	opts := metav1.ListOptions{
+		LabelSelector: labelSelector,
+		FieldSelector: fieldSelector,
+	}
+	response, err := client.CoreV1().Pods(metav1.NamespaceAll).List(ctx, opts)
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 pods get failed. err: %v", err)
+		return nil, fmt.Errorf("kubernetes CoreV1 pods list failed. err: %v", err)
+	}
+	for _, item := range response.Items {
+		var pod Pod
+		pod.Namespace = item.Namespace
+		pod.Name = item.Name
+		pod.PodIP = item.Status.PodIP
+		pod.HostIP = item.Status.HostIP
+		pod.NodeName = item.Spec.NodeName
+		pod.Status = podHelper.GetPodStatus(item)
+		pod.RestartCount = podHelper.GetMaxRestartCount(item)
+		pod.Labels = item.Labels
+		pod.Containers = podHelper.GetContainerStatuses(item)
+		pod.Ready = fmt.Sprintf("%v/%v", podHelper.GetMaxReadyCount(item), len(item.Status.ContainerStatuses))
+		pod.CreatedAt = item.CreationTimestamp.Time.Format("2006-01-02 15:04:05")
+		pods = append(pods, pod)
+	}
+	return pods, nil
+}
+
+func (r *podRepository) Get(ctx context.Context, id uint, ns, name string) (pod *corev1.Pod, err error) {
+	client, err := r.cfgFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
+	if err != nil {
 		return nil, err
+	}
+	response, err := client.CoreV1().Pods(ns).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("kubernetes CoreV1 pods get failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *podRepository) GetDetail(ctx context.Context, id int, ns, name string) (pod Pod, err error) {
-	client, err := r.cfgFactory.GetClientSet(ctx, id)
+func (r *podRepository) GetDetail(ctx context.Context, id uint, ns, name string) (pod Pod, err error) {
+	client, err := r.cfgFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return pod, err
 	}
-	response, err := client.CoreV1().Pods(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	response, err := client.CoreV1().Pods(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 pods get failed. err: %v", err)
-		return pod, err
+		return pod, fmt.Errorf("kubernetes CoreV1 pods get failed. err: %v", err)
 	}
 
 	podHelper := helper.NewPodHelper()
@@ -136,20 +164,20 @@ func (r *podRepository) GetDetail(ctx context.Context, id int, ns, name string) 
 	return pod, nil
 }
 
-func (r *podRepository) Delete(ctx context.Context, id int, ns, name string) error {
-	client, err := r.cfgFactory.GetClientSet(ctx, id)
+func (r *podRepository) Delete(ctx context.Context, id uint, ns, name string) error {
+	client, err := r.cfgFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return err
 	}
-	err = client.CoreV1().Pods(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err = client.CoreV1().Pods(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 pods delete failed. err: %v", err)
+		return fmt.Errorf("kubernetes CoreV1 pods delete failed. err: %v", err)
 	}
-	return err
+	return nil
 }
 
-func (r *podRepository) GetLogs(ctx context.Context, id int, ns, name, container string, follow bool, tailLines, sinceSeconds *int64) (io.ReadCloser, context.CancelFunc, error) {
-	client, err := r.cfgFactory.GetClientSet(ctx, id)
+func (r *podRepository) GetLogs(ctx context.Context, id uint, ns, name, container string, follow bool, tailLines, sinceSeconds *int64) (io.ReadCloser, context.CancelFunc, error) {
+	client, err := r.cfgFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -164,14 +192,13 @@ func (r *podRepository) GetLogs(ctx context.Context, id int, ns, name, container
 	stream, err := response.Stream(streamCtx)
 	if err != nil {
 		cancel() // 避免泄漏
-		logger.Errorf("kubernetes CoreV1 pods get logs stream failed. err: %v", err)
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("kubernetes CoreV1 pods get logs stream failed. err: %v", err)
 	}
 	return stream, cancel, err
 }
 
-func (r *podRepository) Executor(ctx context.Context, id int, ns, name, container string) (remotecommand.Executor, error) {
-	client, err := r.cfgFactory.GetClientSet(ctx, id)
+func (r *podRepository) Executor(ctx context.Context, id uint, ns, name, container string) (remotecommand.Executor, error) {
+	client, err := r.cfgFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -220,7 +247,7 @@ func (r *podRepository) Executor(ctx context.Context, id int, ns, name, containe
 			TTY:    true, // 开启终端, 默认为 false
 		}, scheme.ParameterCodec) // scheme.ParameterCodec 应该是 pod 的 GVK(GroupVersion & Kind) 之类的
 
-	cfg, err := r.cfgFactory.GetRestConfig(ctx, id)
+	cfg, err := r.cfgFactory.GetRestConfigAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -232,8 +259,8 @@ func (r *podRepository) Executor(ctx context.Context, id int, ns, name, containe
 	return executor, nil
 }
 
-func (r *podRepository) DebugExecutor(ctx context.Context, id int, ns, name, container string) (remotecommand.Executor, error) {
-	client, err := r.cfgFactory.GetClientSet(ctx, id)
+func (r *podRepository) DebugExecutor(ctx context.Context, id uint, ns, name, container string) (remotecommand.Executor, error) {
+	client, err := r.cfgFactory.GetClientSetAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -248,7 +275,7 @@ func (r *podRepository) DebugExecutor(ctx context.Context, id int, ns, name, con
 			Stderr:    true,
 			TTY:       false,
 		}, scheme.ParameterCodec)
-	cfg, err := r.cfgFactory.GetRestConfig(ctx, id)
+	cfg, err := r.cfgFactory.GetRestConfigAsUser(ctx, id, ImpersonateUsername(ctx))
 	if err != nil {
 		return nil, err
 	}

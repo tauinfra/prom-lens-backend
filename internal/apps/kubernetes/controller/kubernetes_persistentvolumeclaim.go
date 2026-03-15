@@ -2,8 +2,8 @@ package controller
 
 import (
 	"net/http"
-	"strconv"
 	"valyria-backend/internal/apps/kubernetes/service"
+	"valyria-backend/internal/pkg/ginhelper"
 
 	"github.com/gin-gonic/gin"
 	corev1 "k8s.io/api/core/v1"
@@ -20,10 +20,12 @@ func NewPersistentVolumeClaimController(persistentVolumeClaim service.Persistent
 }
 
 func (c *PersistentVolumeClaimController) List(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
 	data, err := c.persistentVolumeClaim.List(ctx, id, ns)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
@@ -33,11 +35,13 @@ func (c *PersistentVolumeClaimController) List(ctx *gin.Context) {
 }
 
 func (c *PersistentVolumeClaimController) Get(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-		name  = ctx.Param("name")
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	name := ctx.Param("name")
 	data, err := c.persistentVolumeClaim.Get(ctx, id, ns, name)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
@@ -47,31 +51,36 @@ func (c *PersistentVolumeClaimController) Get(ctx *gin.Context) {
 }
 
 func (c *PersistentVolumeClaimController) Create(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-		body  = &corev1.PersistentVolumeClaim{}
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	body := &corev1.PersistentVolumeClaim{}
 	// 绑定数据
 	if err := ctx.ShouldBindJSON(&body); err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
+		return
 	}
 	// 创建
-	data, err := c.persistentVolumeClaim.Create(ctx, id, ns, body)
+	_, err := c.persistentVolumeClaim.Create(ctx, id, ns, body)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data})
+	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
 }
 
 func (c *PersistentVolumeClaimController) Update(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-		name  = ctx.Param("name")
-		body  = &corev1.PersistentVolumeClaim{}
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	name := ctx.Param("name")
+	body := &corev1.PersistentVolumeClaim{}
 	// 绑定数据
 	if err := ctx.ShouldBindJSON(&body); err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
@@ -80,24 +89,38 @@ func (c *PersistentVolumeClaimController) Update(ctx *gin.Context) {
 	// 更新
 	body.Name = name
 	body.Namespace = ns
-	data, err := c.persistentVolumeClaim.Update(ctx, id, ns, body)
+	_, err := c.persistentVolumeClaim.Update(ctx, id, ns, body)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data})
+	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
 }
 
 func (c *PersistentVolumeClaimController) Delete(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-		name  = ctx.Param("name")
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	name := ctx.Param("name")
 	err := c.persistentVolumeClaim.Delete(ctx, id, ns, name)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
+}
+
+func (c *PersistentVolumeClaimController) DeleteBatch(ctx *gin.Context) {
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	deleteBatchByNames(ctx, func(name string) error {
+		return c.persistentVolumeClaim.Delete(ctx, id, ns, name)
+	})
 }

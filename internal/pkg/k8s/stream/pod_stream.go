@@ -25,17 +25,12 @@ type xtermMessage struct {
 }
 
 // Next executor 回调获取 Xterm WebSSH 端大小
-func (s *StreamHandler) Next() (size *remotecommand.TerminalSize) {
-	select {
-	case ret := <-s.ResizeEvent:
-		var width, height uint16 = 2000, 100
-		logger.Debug(fmt.Sprintf("终端大小调整: %dx%d", width, height))
-		size = &ret
-	default:
-		// 重要：没有数据时返回 nil，避免阻塞 Kubernetes Exec
-		size = nil
+func (s *StreamHandler) Next() *remotecommand.TerminalSize {
+	size, ok := <-s.ResizeEvent
+	if !ok {
+		return nil
 	}
-	return
+	return &size
 }
 
 // Read executor 回调读取 Xterm WebSSH 端输入
@@ -64,6 +59,10 @@ func (s *StreamHandler) Read(p []byte) (size int, err error) {
 
 	switch xtermMsg.Type {
 	case "resize":
+		if xtermMsg.Cols == 0 || xtermMsg.Rows == 0 {
+			logger.Warn("终端调整大小参数无效，已忽略")
+			return 0, nil
+		}
 		logger.Info(fmt.Sprintf("终端调整大小: %dx%d", xtermMsg.Cols, xtermMsg.Rows))
 		select {
 		case s.ResizeEvent <- remotecommand.TerminalSize{Width: xtermMsg.Cols, Height: xtermMsg.Rows}:

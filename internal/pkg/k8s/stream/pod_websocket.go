@@ -4,8 +4,17 @@ import (
 	"errors"
 	"net/http"
 	"sync"
+	"time"
+	"valyria-backend/internal/core/logger"
 
 	"github.com/gorilla/websocket"
+)
+
+const (
+	writeWait      = 10 * time.Second
+	pongWait       = 60 * time.Second
+	pingPeriod     = (pongWait * 9) / 10
+	maxMessageSize = 1024 * 1024
 )
 
 type WsMessage struct {
@@ -34,6 +43,11 @@ func WsConn(response http.ResponseWriter, request *http.Request, header string) 
 	if err != nil {
 		return nil, err
 	}
+	wsSocket.SetReadLimit(maxMessageSize)
+	wsSocket.SetReadDeadline(time.Now().Add(pongWait))
+	wsSocket.SetPongHandler(func(string) error {
+		return wsSocket.SetReadDeadline(time.Now().Add(pongWait))
+	})
 
 	conn := &WsConnection{
 		wsSocket:  wsSocket,
@@ -58,6 +72,7 @@ func (c *WsConnection) readLoop() {
 	for {
 		msgType, data, err := c.wsSocket.ReadMessage()
 		if err != nil {
+			logger.Errorf("websocket read failed: %v", err)
 			return
 		}
 
@@ -74,11 +89,28 @@ func (c *WsConnection) readLoop() {
 // ----------
 func (c *WsConnection) writeLoop() {
 	defer c.WsClose()
+	ticker := time.NewTicker(pingPeriod)
+	defer ticker.Stop()
 
 	for {
 		select {
 		case msg := <-c.outChan:
+			if err := c.wsSocket.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				logger.Errorf("websocket set write deadline failed: %v", err)
+				return
+			}
 			if err := c.wsSocket.WriteMessage(msg.MessageType, msg.Data); err != nil {
+				logger.Errorf("websocket write failed: %v", err)
+				return
+			}
+
+		case <-ticker.C:
+			if err := c.wsSocket.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				logger.Errorf("websocket set write deadline failed: %v", err)
+				return
+			}
+			if err := c.wsSocket.WriteMessage(websocket.PingMessage, nil); err != nil {
+				logger.Errorf("websocket ping failed: %v", err)
 				return
 			}
 

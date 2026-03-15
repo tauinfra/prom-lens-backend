@@ -2,8 +2,8 @@ package controller
 
 import (
 	"net/http"
-	"strconv"
 	"valyria-backend/internal/apps/kubernetes/service"
+	"valyria-backend/internal/pkg/ginhelper"
 
 	"github.com/gin-gonic/gin"
 	appsv1 "k8s.io/api/apps/v1"
@@ -20,11 +20,13 @@ func NewReplicaSetController(replicaset service.ReplicaSetManager) *ReplicaSetCo
 }
 
 func (c *ReplicaSetController) List(ctx *gin.Context) {
-	var (
-		id, _         = strconv.Atoi(ctx.Param("id"))
-		ns            = ctx.Param("namespace")
-		labelSelector = ctx.Query("labelSelector")
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	labelSelector := ctx.Query("labelSelector")
 	data, err := c.replicaset.List(ctx, id, ns, labelSelector)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
@@ -34,11 +36,13 @@ func (c *ReplicaSetController) List(ctx *gin.Context) {
 }
 
 func (c *ReplicaSetController) Get(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-		name  = ctx.Param("name")
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	name := ctx.Param("name")
 	data, err := c.replicaset.Get(ctx, id, ns, name)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
@@ -48,12 +52,14 @@ func (c *ReplicaSetController) Get(ctx *gin.Context) {
 }
 
 func (c *ReplicaSetController) Update(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-		name  = ctx.Param("name")
-		body  = &appsv1.ReplicaSet{}
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	name := ctx.Param("name")
+	body := &appsv1.ReplicaSet{}
 	// 绑定数据
 	if err := ctx.ShouldBindJSON(&body); err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
@@ -62,24 +68,38 @@ func (c *ReplicaSetController) Update(ctx *gin.Context) {
 	// 更新
 	body.Name = name
 	body.Namespace = ns
-	data, err := c.replicaset.Update(ctx, id, ns, body)
+	_, err := c.replicaset.Update(ctx, id, ns, body)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
-	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data})
+	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
 }
 
 func (c *ReplicaSetController) Delete(ctx *gin.Context) {
-	var (
-		id, _ = strconv.Atoi(ctx.Param("id"))
-		ns    = ctx.Param("namespace")
-		name  = ctx.Param("name")
-	)
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	name := ctx.Param("name")
 	err := c.replicaset.Delete(ctx, id, ns, name)
 	if err != nil {
 		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
+}
+
+func (c *ReplicaSetController) DeleteBatch(ctx *gin.Context) {
+	idU, ok := ginhelper.RequireUintParam(ctx, "id")
+	if !ok {
+		return
+	}
+	id := idU
+	ns := ctx.Param("namespace")
+	deleteBatchByNames(ctx, func(name string) error {
+		return c.replicaset.Delete(ctx, id, ns, name)
+	})
 }

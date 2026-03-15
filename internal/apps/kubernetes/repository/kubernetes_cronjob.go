@@ -1,10 +1,9 @@
 package repository
 
 import (
-	"valyria-backend/internal/core/logger"
-	"valyria-backend/internal/pkg/k8s/factory"
-
 	"context"
+	"fmt"
+	"valyria-backend/internal/pkg/k8s/factory"
 
 	batchv1 "k8s.io/api/batch/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -12,11 +11,11 @@ import (
 )
 
 type CronJobRepository interface {
-	List(ctx context.Context, id int, ns string) ([]CronJob, error)
-	Get(ctx context.Context, id int, ns, name string) (*batchv1.CronJob, error)
-	Create(ctx context.Context, id int, ns string, body *batchv1.CronJob) (*batchv1.CronJob, error)
-	Update(ctx context.Context, id int, ns string, body *batchv1.CronJob) (*batchv1.CronJob, error)
-	Delete(ctx context.Context, id int, ns, name string) error
+	List(ctx context.Context, id uint, ns string) ([]CronJob, error)
+	Get(ctx context.Context, id uint, ns, name string) (*batchv1.CronJob, error)
+	Create(ctx context.Context, id uint, ns string, body *batchv1.CronJob) (*batchv1.CronJob, error)
+	Update(ctx context.Context, id uint, ns string, body *batchv1.CronJob) (*batchv1.CronJob, error)
+	Delete(ctx context.Context, id uint, ns, name string) error
 }
 
 type CronJob struct {
@@ -37,19 +36,18 @@ func NewCronJobRepository(cfgFactory *KubeConfigFactory, gvkFactory *factory.GVK
 	}
 }
 
-func (r *cronJobRepository) List(ctx context.Context, id int, ns string) (jobs []CronJob, err error) {
+func (r *cronJobRepository) List(ctx context.Context, id uint, ns string) (jobs []CronJob, err error) {
 	var job CronJob
 	var client *kubernetes.Clientset
 	client, err = r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.BatchV1().CronJobs(ns).List(context.TODO(), metav1.ListOptions{
-		TimeoutSeconds: &timeoutSeconds,
+	response, err := client.BatchV1().CronJobs(ns).List(ctx, metav1.ListOptions{
+		TimeoutSeconds: timeoutSeconds(),
 	})
 	if err != nil {
-		logger.Errorf("kubernetes BatchV1 jobs list failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes BatchV1 jobs list failed. err: %v", err)
 	}
 	for _, item := range response.Items {
 		job.Namespace = item.Namespace
@@ -60,61 +58,57 @@ func (r *cronJobRepository) List(ctx context.Context, id int, ns string) (jobs [
 	return jobs, nil
 }
 
-func (r *cronJobRepository) Get(ctx context.Context, id int, ns, name string) (job *batchv1.CronJob, err error) {
+func (r *cronJobRepository) Get(ctx context.Context, id uint, ns, name string) (job *batchv1.CronJob, err error) {
 	var client *kubernetes.Clientset
 	client, err = r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.BatchV1().CronJobs(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	response, err := client.BatchV1().CronJobs(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes BatchV1 job get failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes BatchV1 job get failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *cronJobRepository) Create(ctx context.Context, id int, ns string, body *batchv1.CronJob) (cronJob *batchv1.CronJob, err error) {
+func (r *cronJobRepository) Create(ctx context.Context, id uint, ns string, body *batchv1.CronJob) (cronJob *batchv1.CronJob, err error) {
 	var client *kubernetes.Clientset
 	client, err = r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.BatchV1().CronJobs(ns).Update(context.TODO(), body, metav1.UpdateOptions{})
+	response, err := client.BatchV1().CronJobs(ns).Update(ctx, body, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes BatchV1 job create failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes BatchV1 job create failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *cronJobRepository) Update(ctx context.Context, id int, ns string, body *batchv1.CronJob) (cronJob *batchv1.CronJob, err error) {
+func (r *cronJobRepository) Update(ctx context.Context, id uint, ns string, body *batchv1.CronJob) (cronJob *batchv1.CronJob, err error) {
 	var client *kubernetes.Clientset
 	client, err = r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.BatchV1().CronJobs(ns).Update(context.TODO(), body, metav1.UpdateOptions{})
+	response, err := client.BatchV1().CronJobs(ns).Update(ctx, body, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes BatchV1 job update failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes BatchV1 job update failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *cronJobRepository) Delete(ctx context.Context, id int, ns, name string) (err error) {
+func (r *cronJobRepository) Delete(ctx context.Context, id uint, ns, name string) (err error) {
 	var client *kubernetes.Clientset
 	client, err = r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return err
 	}
-	err = client.BatchV1().CronJobs(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err = client.BatchV1().CronJobs(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes BatchV1 job delete failed. err: %v", err)
-		return err
+		return fmt.Errorf("kubernetes BatchV1 job delete failed. err: %v", err)
 	}
 	return nil
 }

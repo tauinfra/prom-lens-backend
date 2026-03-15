@@ -3,7 +3,7 @@ package encryption
 import (
 	"encoding/base64"
 	"fmt"
-	"valyria-backend/internal/core/configs"
+	"valyria-backend/internal/core/config"
 
 	"crypto/rand"
 	"io"
@@ -20,7 +20,7 @@ type SecretBoxEncryptor struct {
 	key *[32]byte
 }
 
-func NewSecretBoxEncryptor(cfg *configs.Config) (Encryptor, error) {
+func NewSecretBoxEncryptor(cfg *config.Config) (Encryptor, error) {
 	key := &[32]byte{}
 	copy(key[:], []byte(cfg.App.EncryptionKey))
 	return &SecretBoxEncryptor{key: key}, nil

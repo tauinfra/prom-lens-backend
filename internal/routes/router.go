@@ -14,14 +14,16 @@ func SetupRouter(db *gorm.DB, provider *di.Provider) *gin.Engine {
 		provider.AuditManager.AuditLogin(db),     // 登录审计中间件
 		provider.AuditManager.AuditOperation(db), // 操作审计中间件
 		provider.JWTManager.Cors(),               // 跨域中间件
-		provider.JWTManager.Auth(),               // 认证中间件
-		provider.PermissionManager.ModuleAccess(db),
+		provider.JWTManager.RequireAuth(),        // 认证中间件
 	)
 
 	api := r.Group("/api/v1")
 
-	AuthRouters(api, provider)        // 认证系统
-	kubeRouters(api, db, provider)    // 容器管理
-	FoundryRouters(api, db, provider) // 发布平台
+	DashboardRouters(api, provider)      // 仪表盘（独立模块）
+	AuthnRouters(api, provider)         // 认证系统
+	AuditRouters(api, provider)          // 审计日志
+	KubernetesRouters(api, db, provider) // 容器管理
+	PrometheusRouters(api, provider)     // 监控平台
+	DragonRouters(api, provider)         // 发布平台
 	return r
 }

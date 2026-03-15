@@ -16,11 +16,12 @@ type KubeConfig struct {
 }
 
 func NewKubeConfig(host, token string) *KubeConfig {
+	qps, burst := kubeClientLimits()
 	return &KubeConfig{
 		Host:  host,
 		Token: token,
-		QPS:   100,
-		Burst: 100,
+		QPS:   qps,
+		Burst: burst,
 	}
 }
 

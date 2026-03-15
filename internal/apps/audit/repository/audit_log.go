@@ -1,30 +1,32 @@
 package repository
 
 import (
-	"gorm.io/gorm"
+	"context"
 	"valyria-backend/internal/apps/audit/model"
 	pg "valyria-backend/internal/core/pagination"
+
+	"gorm.io/gorm"
 )
 
 // AuditLogRepository 定义接口
 type AuditLogRepository interface {
-	List(tx *gorm.DB, params pg.QueryParams) ([]model.AuditLog, pg.Pagination, error)
+	List(ctx context.Context, params pg.QueryParams) ([]model.AuditLog, pg.Pagination, error)
 }
 
 // auditLogRepository 实现了 AuditLogRepository 接口
 type auditLogRepository struct {
-	tx *gorm.DB
+	db *gorm.DB
 }
 
 // NewAuditLogRepository 创建新的 AuditLogInterface 实例
-func NewAuditLogRepository(tx *gorm.DB) AuditLogRepository {
-	return &auditLogRepository{tx: tx}
+func NewAuditLogRepository(db *gorm.DB) AuditLogRepository {
+	return &auditLogRepository{db: db}
 }
 
 // List 列表
-func (r *auditLogRepository) List(tx *gorm.DB, params pg.QueryParams) (data []model.AuditLog, pagination pg.Pagination, err error) {
+func (r *auditLogRepository) List(ctx context.Context, params pg.QueryParams) (data []model.AuditLog, pagination pg.Pagination, err error) {
 	// 分页查询
-	if pagination, err = pg.Paginate(tx, &data, params); err != nil {
+	if pagination, err = pg.Paginate(r.db.WithContext(ctx), &data, params); err != nil {
 		return nil, pg.Pagination{}, err
 	}
 	return

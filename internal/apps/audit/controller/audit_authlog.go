@@ -1,44 +1,38 @@
 package controller
 
 import (
-	"github.com/gin-gonic/gin"
-	"gorm.io/gorm"
 	"net/http"
 	"strconv"
-	"valyria-backend/internal/apps/audit/repository"
 	"valyria-backend/internal/apps/audit/service"
 	pg "valyria-backend/internal/core/pagination"
+
+	"github.com/gin-gonic/gin"
 )
 
-// AuthLogController 处理集群相关请求的控制器结构体
+// AuthLogController 处理登录日志请求的控制器结构体
 type AuthLogController struct {
 	authLog service.AuthLogService // 使用服务接口
 }
 
-func SetupAuthLogController(tx *gorm.DB) *AuthLogController {
-	authLog := service.NewAuthLogService(tx, repository.NewAuthLogRepository(tx))
+func NewAuthLogController(authLog service.AuthLogService) *AuthLogController {
 	return &AuthLogController{authLog: authLog}
 }
 
 func (c *AuthLogController) List(ctx *gin.Context) {
 	page, _ := strconv.Atoi(ctx.Query("page"))
 	size, _ := strconv.Atoi(ctx.Query("size"))
-
+	// 分页
 	params := pg.QueryParams{
 		Page:      page,
 		Size:      size,
 		SortBy:    ctx.Query("sortBy"),
 		SortOrder: ctx.Query("sortOrder"),
-	}
-	// 默认排序
-	if params.SortBy == "" && params.SortOrder == "" {
-		params.SortBy = "created_at"
-		params.SortOrder = "desc"
+		Keyword:   ctx.Query("keyword"),
 	}
 
-	data, pagination, err := c.authLog.List(params)
+	data, pagination, err := c.authLog.List(ctx, params)
 	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data, "pagination": pagination})

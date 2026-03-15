@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"valyria-backend/internal/core/logger"
+	"fmt"
 	"valyria-backend/internal/pkg/k8s/factory"
 
 	corev1 "k8s.io/api/core/v1"
@@ -10,11 +10,11 @@ import (
 )
 
 type PersistentVolumeClaimRepository interface {
-	List(ctx context.Context, id int, ns string) ([]PersistentVolumeClaim, error)
-	Get(ctx context.Context, id int, ns, name string) (*corev1.PersistentVolumeClaim, error)
-	Create(ctx context.Context, id int, ns string, body *corev1.PersistentVolumeClaim) (*corev1.PersistentVolumeClaim, error)
-	Update(ctx context.Context, id int, ns string, body *corev1.PersistentVolumeClaim) (*corev1.PersistentVolumeClaim, error)
-	Delete(ctx context.Context, id int, ns, name string) error
+	List(ctx context.Context, id uint, ns string) ([]PersistentVolumeClaim, error)
+	Get(ctx context.Context, id uint, ns, name string) (*corev1.PersistentVolumeClaim, error)
+	Create(ctx context.Context, id uint, ns string, body *corev1.PersistentVolumeClaim) (*corev1.PersistentVolumeClaim, error)
+	Update(ctx context.Context, id uint, ns string, body *corev1.PersistentVolumeClaim) (*corev1.PersistentVolumeClaim, error)
+	Delete(ctx context.Context, id uint, ns, name string) error
 }
 
 type PersistentVolumeClaim struct {
@@ -39,18 +39,17 @@ func NewPersistentVolumeClaimRepository(cfgFactory *KubeConfigFactory, gvkFactor
 	}
 }
 
-func (r *persistentVolumeClaimRepository) List(ctx context.Context, id int, ns string) (data []PersistentVolumeClaim, err error) {
+func (r *persistentVolumeClaimRepository) List(ctx context.Context, id uint, ns string) (data []PersistentVolumeClaim, err error) {
 	var pvc PersistentVolumeClaim
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.CoreV1().PersistentVolumeClaims(ns).List(context.TODO(), metav1.ListOptions{
-		TimeoutSeconds: &timeoutSeconds,
+	response, err := client.CoreV1().PersistentVolumeClaims(ns).List(ctx, metav1.ListOptions{
+		TimeoutSeconds: timeoutSeconds(),
 	})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 persistentVolumeClaims list failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 persistentVolumeClaims list failed. err: %v", err)
 	}
 	for _, item := range response.Items {
 		pvc.Name = item.Name
@@ -65,57 +64,53 @@ func (r *persistentVolumeClaimRepository) List(ctx context.Context, id int, ns s
 	return data, nil
 }
 
-func (r *persistentVolumeClaimRepository) Get(ctx context.Context, id int, ns, name string) (*corev1.PersistentVolumeClaim, error) {
+func (r *persistentVolumeClaimRepository) Get(ctx context.Context, id uint, ns, name string) (*corev1.PersistentVolumeClaim, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.CoreV1().PersistentVolumeClaims(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	response, err := client.CoreV1().PersistentVolumeClaims(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 persistentVolumeClaim get failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 persistentVolumeClaim get failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *persistentVolumeClaimRepository) Create(ctx context.Context, id int, ns string, body *corev1.PersistentVolumeClaim) (*corev1.PersistentVolumeClaim, error) {
+func (r *persistentVolumeClaimRepository) Create(ctx context.Context, id uint, ns string, body *corev1.PersistentVolumeClaim) (*corev1.PersistentVolumeClaim, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.CoreV1().PersistentVolumeClaims(ns).Update(context.TODO(), body, metav1.UpdateOptions{})
+	response, err := client.CoreV1().PersistentVolumeClaims(ns).Create(ctx, body, metav1.CreateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 persistentVolumeClaim create failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 persistentVolumeClaim create failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *persistentVolumeClaimRepository) Update(ctx context.Context, id int, ns string, body *corev1.PersistentVolumeClaim) (*corev1.PersistentVolumeClaim, error) {
+func (r *persistentVolumeClaimRepository) Update(ctx context.Context, id uint, ns string, body *corev1.PersistentVolumeClaim) (*corev1.PersistentVolumeClaim, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.CoreV1().PersistentVolumeClaims(ns).Update(context.TODO(), body, metav1.UpdateOptions{})
+	response, err := client.CoreV1().PersistentVolumeClaims(ns).Update(ctx, body, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 persistentVolumeClaim update failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 persistentVolumeClaim update failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *persistentVolumeClaimRepository) Delete(ctx context.Context, id int, ns, name string) error {
+func (r *persistentVolumeClaimRepository) Delete(ctx context.Context, id uint, ns, name string) error {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return err
 	}
-	err = client.CoreV1().PersistentVolumeClaims(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err = client.CoreV1().PersistentVolumeClaims(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 persistentVolumeClaim delete failed. err: %v", err)
-		return err
+		return fmt.Errorf("kubernetes CoreV1 persistentVolumeClaim delete failed. err: %v", err)
 	}
 	return nil
 }

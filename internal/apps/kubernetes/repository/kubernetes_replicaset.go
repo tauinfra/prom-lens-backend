@@ -2,7 +2,7 @@ package repository
 
 import (
 	"context"
-	"valyria-backend/internal/core/logger"
+	"fmt"
 	"valyria-backend/internal/pkg/k8s/factory"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -10,10 +10,10 @@ import (
 )
 
 type ReplicaSetRepository interface {
-	List(ctx context.Context, id int, ns, labelSelector string) ([]ReplicaSet, error)
-	Get(ctx context.Context, id int, ns, name string) (*appsv1.ReplicaSet, error)
-	Update(ctx context.Context, id int, ns string, body *appsv1.ReplicaSet) (*appsv1.ReplicaSet, error)
-	Delete(ctx context.Context, id int, ns, name string) error
+	List(ctx context.Context, id uint, ns, labelSelector string) ([]ReplicaSet, error)
+	Get(ctx context.Context, id uint, ns, name string) (*appsv1.ReplicaSet, error)
+	Update(ctx context.Context, id uint, ns string, body *appsv1.ReplicaSet) (*appsv1.ReplicaSet, error)
+	Delete(ctx context.Context, id uint, ns, name string) error
 }
 
 type ReplicaSet struct {
@@ -36,19 +36,18 @@ func NewReplicaSetRepository(cfgFactory *KubeConfigFactory, gvkFactory *factory.
 	}
 }
 
-func (r *replicaSetRepository) List(ctx context.Context, id int, ns, labelSelector string) (replicaSets []ReplicaSet, err error) {
+func (r *replicaSetRepository) List(ctx context.Context, id uint, ns, labelSelector string) (replicaSets []ReplicaSet, err error) {
 	var replicaset ReplicaSet
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.AppsV1().ReplicaSets(ns).List(context.TODO(), metav1.ListOptions{
+	response, err := client.AppsV1().ReplicaSets(ns).List(ctx, metav1.ListOptions{
 		LabelSelector:  labelSelector,
-		TimeoutSeconds: &timeoutSeconds,
+		TimeoutSeconds: timeoutSeconds(),
 	})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 ReplicaSets list failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 ReplicaSets list failed. err: %v", err)
 	}
 	for _, item := range response.Items {
 		replicaset.Namespace = item.Namespace
@@ -61,43 +60,40 @@ func (r *replicaSetRepository) List(ctx context.Context, id int, ns, labelSelect
 	return
 }
 
-func (r *replicaSetRepository) Get(ctx context.Context, id int, ns, name string) (*appsv1.ReplicaSet, error) {
+func (r *replicaSetRepository) Get(ctx context.Context, id uint, ns, name string) (*appsv1.ReplicaSet, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.AppsV1().ReplicaSets(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	response, err := client.AppsV1().ReplicaSets(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 ReplicaSet get failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 ReplicaSet get failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *replicaSetRepository) Update(ctx context.Context, id int, ns string, body *appsv1.ReplicaSet) (*appsv1.ReplicaSet, error) {
+func (r *replicaSetRepository) Update(ctx context.Context, id uint, ns string, body *appsv1.ReplicaSet) (*appsv1.ReplicaSet, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.AppsV1().ReplicaSets(ns).Update(context.TODO(), body, metav1.UpdateOptions{})
+	response, err := client.AppsV1().ReplicaSets(ns).Update(ctx, body, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 ReplicaSet update failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 ReplicaSet update failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *replicaSetRepository) Delete(ctx context.Context, id int, ns, name string) error {
+func (r *replicaSetRepository) Delete(ctx context.Context, id uint, ns, name string) error {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return err
 	}
-	err = client.AppsV1().ReplicaSets(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err = client.AppsV1().ReplicaSets(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 ReplicaSet delete failed. err: %v", err)
-		return err
+		return fmt.Errorf("kubernetes AppsV1 ReplicaSet delete failed. err: %v", err)
 	}
 	return nil
 }

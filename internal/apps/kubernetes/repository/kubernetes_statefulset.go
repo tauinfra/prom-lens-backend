@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"time"
-	"valyria-backend/internal/core/logger"
 	"valyria-backend/internal/pkg/k8s/factory"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -14,14 +13,14 @@ import (
 )
 
 type StatefulSetRepository interface {
-	List(ctx context.Context, id int, ns string) ([]StatefulSet, error)
-	Get(ctx context.Context, id int, ns, name string) (*appsv1.StatefulSet, error)
-	GetDetail(ctx context.Context, id int, ns, name string) (StatefulSet, error)
-	Create(ctx context.Context, id int, ns string, body *appsv1.StatefulSet) (*appsv1.StatefulSet, error)
-	Update(ctx context.Context, id int, ns string, body *appsv1.StatefulSet) (*appsv1.StatefulSet, error)
-	Delete(ctx context.Context, id int, ns, name string) error
-	Scale(ctx context.Context, id int, ns string, name string, replicas int32) (*autoscalingv1.Scale, error)
-	Restart(ctx context.Context, id int, ns string, name string) (*appsv1.StatefulSet, error)
+	List(ctx context.Context, id uint, ns string) ([]StatefulSet, error)
+	Get(ctx context.Context, id uint, ns, name string) (*appsv1.StatefulSet, error)
+	GetDetail(ctx context.Context, id uint, ns, name string) (StatefulSet, error)
+	Create(ctx context.Context, id uint, ns string, body *appsv1.StatefulSet) (*appsv1.StatefulSet, error)
+	Update(ctx context.Context, id uint, ns string, body *appsv1.StatefulSet) (*appsv1.StatefulSet, error)
+	Delete(ctx context.Context, id uint, ns, name string) error
+	Scale(ctx context.Context, id uint, ns string, name string, replicas int32) (*autoscalingv1.Scale, error)
+	Restart(ctx context.Context, id uint, ns string, name string) (*appsv1.StatefulSet, error)
 }
 
 type StatefulSet struct {
@@ -49,7 +48,7 @@ func NewStatefulSetRepository(cfgFactory *KubeConfigFactory, gvkFactory *factory
 	}
 }
 
-func (r *statefulSetRepository) List(ctx context.Context, id int, ns string) (statefulSets []StatefulSet, err error) {
+func (r *statefulSetRepository) List(ctx context.Context, id uint, ns string) (statefulSets []StatefulSet, err error) {
 	var (
 		statefulSet StatefulSet
 		matchLabels string
@@ -58,12 +57,11 @@ func (r *statefulSetRepository) List(ctx context.Context, id int, ns string) (st
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.AppsV1().StatefulSets(ns).List(context.TODO(), metav1.ListOptions{
-		TimeoutSeconds: &timeoutSeconds,
+	response, err := client.AppsV1().StatefulSets(ns).List(ctx, metav1.ListOptions{
+		TimeoutSeconds: timeoutSeconds(),
 	})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 statefulSets list failed. err: %v1", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 statefulSets list failed. err: %v1", err)
 	}
 	for _, item := range response.Items {
 		for k, v := range item.Spec.Selector.MatchLabels {
@@ -84,14 +82,14 @@ func (r *statefulSetRepository) List(ctx context.Context, id int, ns string) (st
 	return statefulSets, nil
 }
 
-func (r *statefulSetRepository) GetDetail(ctx context.Context, id int, ns, name string) (statefulSet StatefulSet, err error) {
+func (r *statefulSetRepository) GetDetail(ctx context.Context, id uint, ns, name string) (statefulSet StatefulSet, err error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return statefulSet, err
 	}
-	response, err := client.AppsV1().StatefulSets(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	response, err := client.AppsV1().StatefulSets(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 statefulSet get failed. err: %v", err)
+		return statefulSet, fmt.Errorf("kubernetes AppsV1 statefulSet get failed. err: %v", err)
 	}
 
 	statefulSet.Namespace = response.Namespace
@@ -107,84 +105,79 @@ func (r *statefulSetRepository) GetDetail(ctx context.Context, id int, ns, name 
 	return statefulSet, nil
 }
 
-func (r *statefulSetRepository) Get(ctx context.Context, id int, ns, name string) (*appsv1.StatefulSet, error) {
+func (r *statefulSetRepository) Get(ctx context.Context, id uint, ns, name string) (*appsv1.StatefulSet, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.AppsV1().StatefulSets(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	response, err := client.AppsV1().StatefulSets(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 statefulSet get failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 statefulSet get failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *statefulSetRepository) Create(ctx context.Context, id int, ns string, statefulSet *appsv1.StatefulSet) (*appsv1.StatefulSet, error) {
+func (r *statefulSetRepository) Create(ctx context.Context, id uint, ns string, statefulSet *appsv1.StatefulSet) (*appsv1.StatefulSet, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.AppsV1().StatefulSets(ns).Create(context.TODO(), statefulSet, metav1.CreateOptions{})
+	response, err := client.AppsV1().StatefulSets(ns).Create(ctx, statefulSet, metav1.CreateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 statefulSet get failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 statefulSet get failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *statefulSetRepository) Update(ctx context.Context, id int, ns string, statefulSet *appsv1.StatefulSet) (*appsv1.StatefulSet, error) {
+func (r *statefulSetRepository) Update(ctx context.Context, id uint, ns string, statefulSet *appsv1.StatefulSet) (*appsv1.StatefulSet, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.AppsV1().StatefulSets(ns).Update(context.TODO(), statefulSet, metav1.UpdateOptions{})
+	response, err := client.AppsV1().StatefulSets(ns).Update(ctx, statefulSet, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 statefulSet update failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 statefulSet update failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *statefulSetRepository) Delete(ctx context.Context, id int, ns, name string) error {
+func (r *statefulSetRepository) Delete(ctx context.Context, id uint, ns, name string) error {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return err
 	}
-	err = client.AppsV1().StatefulSets(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err = client.AppsV1().StatefulSets(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 statefulSet delete failed. err: %v", err)
+		return fmt.Errorf("kubernetes AppsV1 statefulSet delete failed. err: %v", err)
 	}
-	return err
+	return nil
 }
 
 // Scale 更新副本数量
-func (r *statefulSetRepository) Scale(ctx context.Context, id int, ns, name string, replicas int32) (*autoscalingv1.Scale, error) {
+func (r *statefulSetRepository) Scale(ctx context.Context, id uint, ns, name string, replicas int32) (*autoscalingv1.Scale, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	// 获取副本数量
-	scale, err := client.AppsV1().StatefulSets(ns).GetScale(context.TODO(), name, metav1.GetOptions{})
+	scale, err := client.AppsV1().StatefulSets(ns).GetScale(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 statefulSet get scale failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 statefulSet get scale failed. err: %v", err)
 	}
 	scale.Spec.Replicas = replicas // 更新副本数量
-	response, err := client.AppsV1().StatefulSets(ns).UpdateScale(context.TODO(), name, scale, metav1.UpdateOptions{})
+	response, err := client.AppsV1().StatefulSets(ns).UpdateScale(ctx, name, scale, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 statefulSet update scale failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes AppsV1 statefulSet update scale failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
 // Restart 重启
-func (r *statefulSetRepository) Restart(ctx context.Context, id int, ns, name string) (*appsv1.StatefulSet, error) {
+func (r *statefulSetRepository) Restart(ctx context.Context, id uint, ns, name string) (*appsv1.StatefulSet, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
@@ -192,8 +185,7 @@ func (r *statefulSetRepository) Restart(ctx context.Context, id int, ns, name st
 	data := fmt.Sprintf(`{"spec": {"template": {"metadata": {"annotations": {"kubectl.kubernetes.io/restartedAt": "%s"}}}}}`, time.Now().Format("20060102150405"))
 	response, err := client.AppsV1().StatefulSets(ns).Patch(ctx, name, types.StrategicMergePatchType, []byte(data), metav1.PatchOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes AppsV1 deployment restart failed. err: %v", err)
-
+		return nil, fmt.Errorf("kubernetes AppsV1 deployment restart failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, err

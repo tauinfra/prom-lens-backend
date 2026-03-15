@@ -2,18 +2,19 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"valyria-backend/internal/pkg/k8s/factory"
+
 	storagev1 "k8s.io/api/storage/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"valyria-backend/internal/core/logger"
-	"valyria-backend/internal/pkg/k8s/factory"
 )
 
 type StorageClassRepository interface {
-	List(ctx context.Context, id int) ([]StorageClass, error)
-	Get(ctx context.Context, id int, name string) (*storagev1.StorageClass, error)
-	Create(ctx context.Context, id int, body *storagev1.StorageClass) (*storagev1.StorageClass, error)
-	Update(ctx context.Context, id int, body *storagev1.StorageClass) (*storagev1.StorageClass, error)
-	Delete(ctx context.Context, id int, name string) error
+	List(ctx context.Context, id uint) ([]StorageClass, error)
+	Get(ctx context.Context, id uint, name string) (*storagev1.StorageClass, error)
+	Create(ctx context.Context, id uint, body *storagev1.StorageClass) (*storagev1.StorageClass, error)
+	Update(ctx context.Context, id uint, body *storagev1.StorageClass) (*storagev1.StorageClass, error)
+	Delete(ctx context.Context, id uint, name string) error
 }
 
 type StorageClass struct {
@@ -37,18 +38,17 @@ func NewStorageClassRepository(kubeFactory *KubeConfigFactory, gvkFactory *facto
 	}
 }
 
-func (r *storageClassRepository) List(ctx context.Context, id int) (data []StorageClass, err error) {
+func (r *storageClassRepository) List(ctx context.Context, id uint) (data []StorageClass, err error) {
 	var storageClass StorageClass
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.StorageV1().StorageClasses().List(context.TODO(), metav1.ListOptions{
-		TimeoutSeconds: &timeoutSeconds,
+	response, err := client.StorageV1().StorageClasses().List(ctx, metav1.ListOptions{
+		TimeoutSeconds: timeoutSeconds(),
 	})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 persistentVolumes list failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 persistentVolumes list failed. err: %v", err)
 	}
 	for _, item := range response.Items {
 		storageClass.Name = item.Name
@@ -62,57 +62,53 @@ func (r *storageClassRepository) List(ctx context.Context, id int) (data []Stora
 	return data, nil
 }
 
-func (r *storageClassRepository) Get(ctx context.Context, id int, name string) (*storagev1.StorageClass, error) {
+func (r *storageClassRepository) Get(ctx context.Context, id uint, name string) (*storagev1.StorageClass, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.StorageV1().StorageClasses().Get(context.TODO(), name, metav1.GetOptions{})
+	response, err := client.StorageV1().StorageClasses().Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 persistentVolume get failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 persistentVolume get failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *storageClassRepository) Create(ctx context.Context, id int, body *storagev1.StorageClass) (*storagev1.StorageClass, error) {
+func (r *storageClassRepository) Create(ctx context.Context, id uint, body *storagev1.StorageClass) (*storagev1.StorageClass, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.StorageV1().StorageClasses().Update(context.TODO(), body, metav1.UpdateOptions{})
+	response, err := client.StorageV1().StorageClasses().Update(ctx, body, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 persistentVolume create failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 persistentVolume create failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *storageClassRepository) Update(ctx context.Context, id int, body *storagev1.StorageClass) (*storagev1.StorageClass, error) {
+func (r *storageClassRepository) Update(ctx context.Context, id uint, body *storagev1.StorageClass) (*storagev1.StorageClass, error) {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.StorageV1().StorageClasses().Update(context.TODO(), body, metav1.UpdateOptions{})
+	response, err := client.StorageV1().StorageClasses().Update(ctx, body, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 persistentVolume update failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 persistentVolume update failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *storageClassRepository) Delete(ctx context.Context, id int, name string) error {
+func (r *storageClassRepository) Delete(ctx context.Context, id uint, name string) error {
 	client, err := r.cfgFactory.GetClientSet(ctx, id)
 	if err != nil {
 		return err
 	}
-	err = client.StorageV1().StorageClasses().Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err = client.StorageV1().StorageClasses().Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 persistentVolume delete failed. err: %v", err)
-		return err
+		return fmt.Errorf("kubernetes CoreV1 persistentVolume delete failed. err: %v", err)
 	}
 	return nil
 }

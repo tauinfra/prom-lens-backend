@@ -2,18 +2,19 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"valyria-backend/internal/pkg/k8s/factory"
+
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"valyria-backend/internal/core/logger"
-	"valyria-backend/internal/pkg/k8s/factory"
 )
 
 type TaskRepository interface {
-	List(ctx context.Context, id int, ns string) (Tasks []Task, err error)
-	Get(ctx context.Context, id int, ns, name string) (*v1.Task, error)
-	Create(ctx context.Context, id int, ns string, body *v1.Task) (*v1.Task, error)
-	Update(ctx context.Context, id int, ns string, body *v1.Task) (*v1.Task, error)
-	Delete(ctx context.Context, id int, ns, name string) error
+	List(ctx context.Context, id uint, ns string) (Tasks []Task, err error)
+	Get(ctx context.Context, id uint, ns, name string) (*v1.Task, error)
+	Create(ctx context.Context, id uint, ns string, body *v1.Task) (*v1.Task, error)
+	Update(ctx context.Context, id uint, ns string, body *v1.Task) (*v1.Task, error)
+	Delete(ctx context.Context, id uint, ns, name string) error
 }
 
 type Task struct {
@@ -34,16 +35,15 @@ func NewTaskRepository(cfgFactory *KubeConfigFactory, gvkFactory *factory.GVKFac
 	}
 }
 
-func (r *taskRepository) List(ctx context.Context, id int, ns string) (tasks []Task, err error) {
+func (r *taskRepository) List(ctx context.Context, id uint, ns string) (tasks []Task, err error) {
 	var task Task
 	client, err := r.cfgFactory.GetTektonClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.TektonV1().Tasks(ns).List(context.TODO(), metav1.ListOptions{})
+	response, err := client.TektonV1().Tasks(ns).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes TektonV1 Task list failed. err: %v", err)
-		return tasks, err
+		return tasks, fmt.Errorf("kubernetes TektonV1 Task list failed. err: %v", err)
 	}
 	for _, item := range response.Items {
 		task.Namespace = item.Namespace
@@ -54,56 +54,53 @@ func (r *taskRepository) List(ctx context.Context, id int, ns string) (tasks []T
 	return tasks, nil
 }
 
-func (r *taskRepository) Get(ctx context.Context, id int, ns, name string) (*v1.Task, error) {
+func (r *taskRepository) Get(ctx context.Context, id uint, ns, name string) (*v1.Task, error) {
 	client, err := r.cfgFactory.GetTektonClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.TektonV1().Tasks(ns).Get(context.TODO(), name, metav1.GetOptions{})
+	response, err := client.TektonV1().Tasks(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes TektonV1 Task get failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes TektonV1 Task get failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *taskRepository) Create(ctx context.Context, id int, ns string, body *v1.Task) (*v1.Task, error) {
+func (r *taskRepository) Create(ctx context.Context, id uint, ns string, body *v1.Task) (*v1.Task, error) {
 	client, err := r.cfgFactory.GetTektonClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.TektonV1().Tasks(ns).Create(context.TODO(), body, metav1.CreateOptions{})
+	response, err := client.TektonV1().Tasks(ns).Create(ctx, body, metav1.CreateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes TektonV1 Task create failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes TektonV1 Task create failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *taskRepository) Update(ctx context.Context, id int, ns string, body *v1.Task) (*v1.Task, error) {
+func (r *taskRepository) Update(ctx context.Context, id uint, ns string, body *v1.Task) (*v1.Task, error) {
 	client, err := r.cfgFactory.GetTektonClientSet(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	response, err := client.TektonV1().Tasks(ns).Update(context.TODO(), body, metav1.UpdateOptions{})
+	response, err := client.TektonV1().Tasks(ns).Update(ctx, body, metav1.UpdateOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes CoreV1 Task update failed. err: %v", err)
-		return nil, err
+		return nil, fmt.Errorf("kubernetes CoreV1 Task update failed. err: %v", err)
 	}
 	r.gvkFactory.Complete(response)
 	return response, nil
 }
 
-func (r *taskRepository) Delete(ctx context.Context, id int, ns, name string) error {
+func (r *taskRepository) Delete(ctx context.Context, id uint, ns, name string) error {
 	client, err := r.cfgFactory.GetTektonClientSet(ctx, id)
 	if err != nil {
 		return err
 	}
-	err = client.TektonV1().Tasks(ns).Delete(context.TODO(), name, metav1.DeleteOptions{})
+	err = client.TektonV1().Tasks(ns).Delete(ctx, name, metav1.DeleteOptions{})
 	if err != nil {
-		logger.Errorf("kubernetes TektonV1 Task update failed. err: %v", err)
+		return fmt.Errorf("kubernetes TektonV1 Task update failed. err: %v", err)
 	}
-	return err
+	return nil
 }
