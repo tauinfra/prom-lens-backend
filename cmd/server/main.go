@@ -11,13 +11,12 @@ import (
 	"runtime"
 	"syscall"
 	"time"
-	"valyria-backend/internal/apps/kubernetes/worker"
-	"valyria-backend/internal/core/config"
-	"valyria-backend/internal/core/database"
-	"valyria-backend/internal/core/initialize"
-	"valyria-backend/internal/core/logger"
-	"valyria-backend/internal/pkg/di"
-	"valyria-backend/internal/routes"
+	"prom-lens-backend/internal/core/config"
+	"prom-lens-backend/internal/core/database"
+	"prom-lens-backend/internal/core/initialize"
+	"prom-lens-backend/internal/core/logger"
+	"prom-lens-backend/internal/pkg/di"
+	"prom-lens-backend/internal/routes"
 )
 
 var (
@@ -33,7 +32,7 @@ func init() {
 // printStartupInfo 打印启动信息
 func printStartupInfo(cfg *config.Config, startTime time.Time) {
 	logger.Info("========================================")
-	logger.Info("  Valyria Backend Server")
+	logger.Info("  Prom Lens Backend Server")
 	logger.Info("========================================")
 	logger.Infof("Version:     %s", version)
 	logger.Infof("Build Time:  %s", buildTime)
@@ -44,7 +43,6 @@ func printStartupInfo(cfg *config.Config, startTime time.Time) {
 	logger.Infof("  Server Port:     %d", cfg.Server.Port)
 	logger.Infof("  Server Mode:     %s", cfg.Server.Mode)
 	logger.Infof("  Database:        %s@%s:%d/%s", cfg.Database.Username, cfg.Database.Host, cfg.Database.Port, cfg.Database.DBName)
-	logger.Infof("  Redis:           %s (DB: %d)", cfg.Redis.Addr, cfg.Redis.DB)
 	logger.Infof("  Log Level:       %s", cfg.Log.LogLevel)
 	logger.Infof("  Auth Issuer:     %s", cfg.Auth.Issuer)
 	logger.Infof("  Auth Audience:   %s", cfg.Auth.Audience)
@@ -66,16 +64,16 @@ func main() {
 	}
 
 	// 初始化组件
-	db, encryptor, err := initialize.Components(cfg)
+	db, err := initialize.Components(cfg)
 	if err != nil {
 		logger.Fatalf("Failed to initialize components: %v", err)
 	}
-	
+
 	// 打印启动信息
 	printStartupInfo(cfg, startTime)
 
 	// 初始化路由
-	provider := di.NewProvider(cfg, db, encryptor)
+	provider := di.NewProvider(cfg, db)
 	r := routes.SetupRouter(db, provider)
 
 	// 创建 HTTP 服务器
@@ -92,21 +90,11 @@ func main() {
 		}
 	}()
 
-	// 后台：K8s 权限同步 Worker（scan_interval / batch_size / max_retry / base_delay / max_delay 来自 config.permission_worker）
-	runCtx, runCancel := context.WithCancel(context.Background())
-	defer runCancel()
-	permWorkerCfg := cfg.PermissionWorker.Parse()
-	permSyncWorker := worker.NewPermissionSyncWorker(provider.Kubernetes.Permission.Service, permWorkerCfg.ScanInterval)
-	go permSyncWorker.Run(runCtx)
-	hpaHistoryWorker := worker.NewHpaHistorySyncWorker(provider.Kubernetes.HpaHistorySvc, 5*time.Minute)
-	go hpaHistoryWorker.Run(runCtx)
-
 	// 等待中断信号以优雅关闭服务器
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
 	<-quit
 	logger.Info("Shutting down server...")
-	runCancel()
 
 	// 优雅关闭超时：30秒
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -121,9 +109,6 @@ func main() {
 	logger.Info("Cleaning up resources...")
 	if err := database.CloseDatabase(db); err != nil {
 		logger.Errorf("Failed to close database: %v", err)
-	}
-	if err := database.CloseRedis(); err != nil {
-		logger.Errorf("Failed to close redis: %v", err)
 	}
 	if err := logger.Sync(); err != nil {
 		logger.Errorf("Failed to sync logger: %v", err)

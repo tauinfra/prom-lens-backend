@@ -21,12 +21,7 @@ type Rules struct {
 	For         string         `yaml:"for" json:"for"`
 	Labels      datatypes.JSON `yaml:"labels" json:"labels"`
 	Alert       string         `yaml:"alert" json:"alert"`
-	Annotations Annotations    `yaml:"annotations" json:"annotations"`
-}
-
-type Annotations struct {
-	Summary     string `yaml:"summary" json:"summary"`
-	Description string `yaml:"description" json:"description"`
+	Annotations datatypes.JSON `yaml:"annotations" json:"annotations"`
 }
 
 // RecordConfig 结构体

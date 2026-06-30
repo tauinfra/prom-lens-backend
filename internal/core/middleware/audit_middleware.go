@@ -7,8 +7,8 @@ import (
 	"io"
 	"strings"
 	"time"
-	"valyria-backend/internal/apps/audit/model"
-	"valyria-backend/internal/core/logger"
+	"prom-lens-backend/internal/apps/audit/model"
+	"prom-lens-backend/internal/core/logger"
 
 	"github.com/gin-gonic/gin"
 	"github.com/mileusna/useragent"

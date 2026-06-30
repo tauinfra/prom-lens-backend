@@ -3,8 +3,8 @@ package controller
 import (
 	"net/http"
 	"strconv"
-	"valyria-backend/internal/apps/audit/service"
-	pg "valyria-backend/internal/core/pagination"
+	"prom-lens-backend/internal/apps/audit/service"
+	pg "prom-lens-backend/internal/core/pagination"
 
 	"github.com/gin-gonic/gin"
 )

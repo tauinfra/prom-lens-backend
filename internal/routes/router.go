@@ -1,7 +1,7 @@
 package routes
 
 import (
-	"valyria-backend/internal/pkg/di"
+	"prom-lens-backend/internal/pkg/di"
 
 	"github.com/gin-gonic/gin"
 	"gorm.io/gorm"
@@ -9,6 +9,7 @@ import (
 
 func SetupRouter(db *gorm.DB, provider *di.Provider) *gin.Engine {
 	r := gin.Default()
+	registerHealthRoutes(r, db)
 	// 全局中间件（注册顺序：先全局 -> 后局部）
 	r.Use(
 		provider.AuditManager.AuditLogin(db),     // 登录审计中间件
@@ -18,12 +19,11 @@ func SetupRouter(db *gorm.DB, provider *di.Provider) *gin.Engine {
 	)
 
 	api := r.Group("/api/v1")
+	api.Use(provider.JWTManager.RequireSuperuserForDelete())
 
-	DashboardRouters(api, provider)      // 仪表盘（独立模块）
-	AuthnRouters(api, provider)         // 认证系统
-	AuditRouters(api, provider)          // 审计日志
-	KubernetesRouters(api, db, provider) // 容器管理
-	PrometheusRouters(api, provider)     // 监控平台
-	DragonRouters(api, provider)         // 发布平台
+	AuthnRouters(api, provider)       // 认证系统
+	AuditRouters(api, provider)       // 审计日志
+	PrometheusRouters(api, provider)  // Prometheus 规则配置
+	AlertingRouters(api, provider)    // 告警通知
 	return r
 }

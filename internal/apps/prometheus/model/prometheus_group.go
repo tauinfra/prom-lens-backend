@@ -17,5 +17,5 @@ type Group struct {
 }
 
 func (Group) TableName() string {
-	return "valyria_prometheus_group"
+	return "prom_lens_prometheus_group"
 }

@@ -1,0 +1,53 @@
+server:
+  port: 8081
+
+app:
+  jwt_secret: "change-me-use-env-PROM_LENS_APP_JWT_SECRET-in-production"
+
+auth:
+  access_token_expires: 1h
+  refresh_token_expires: 24h
+  issuer: "prom-lens-server"
+  audience: "prom-lens-client"
+  whitelist:
+    - /api/v1/authn/login
+    - /api/v1/authn/refresh-token
+    - /api/v1/alerting/webhook/
+    - /health
+    - /readyz
+    - /metrics
+
+database:
+  host: "127.0.0.1"
+  username: "root"
+  password: "your-password"
+  dbname: "prom_lens"
+  port: 3306
+  max_idle_conns: 10
+  max_open_conns: 100
+  conn_max_lifetime: "1h"
+
+logging:
+  log_dir: "logs"
+  info_log_name: "info.log"
+  error_log_name: "error.log"
+  enable_console: true
+
+prometheus:
+  target:
+    namespace: monitoring
+    configmap: prometheus-targets
+  rule:
+    namespace: thanos
+    configmap: thanos-ruler-config
+
+# Alertmanager 回调本服务的地址，须为 AM Pod 可访问的地址
+base_url: "http://127.0.0.1:8081"
+
+alerting:
+  lark_timeout: 10s
+  alertmanager:
+    namespace: monitoring
+    configmap: alertmanager-config
+    config_key: alertmanager.yml
+    default_receiver: ""

@@ -3,11 +3,11 @@ package service
 import (
 	"context"
 	"errors"
-	"valyria-backend/internal/apps/prometheus/dto"
-	"valyria-backend/internal/apps/prometheus/model"
-	"valyria-backend/internal/apps/prometheus/repository"
-	"valyria-backend/internal/apps/prometheus/request"
-	pg "valyria-backend/internal/core/pagination"
+	"prom-lens-backend/internal/apps/prometheus/dto"
+	"prom-lens-backend/internal/apps/prometheus/model"
+	"prom-lens-backend/internal/apps/prometheus/repository"
+	"prom-lens-backend/internal/apps/prometheus/request"
+	pg "prom-lens-backend/internal/core/pagination"
 )
 
 // TargetGroupManager 定义接口

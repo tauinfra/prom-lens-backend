@@ -14,8 +14,9 @@ type RuleDTO struct {
 	Description string         `json:"description"`
 	Expr        string         `json:"expr"`
 	For         string         `json:"for"`
-	Labels      datatypes.JSON `json:"labels"`
-	Status      *bool          `json:"status"`
+	Labels            datatypes.JSON `json:"labels"`
+	ExtraAnnotations  datatypes.JSON `json:"extraAnnotations"`
+	Status            *bool          `json:"status"`
 	CreatedAt   *time.Time     `json:"createdAt"`
 	UpdatedAt   *time.Time     `json:"updatedAt"`
 }

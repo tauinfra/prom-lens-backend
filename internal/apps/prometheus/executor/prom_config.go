@@ -1,6 +1,6 @@
 package executor
 
-import "valyria-backend/internal/core/config"
+import "prom-lens-backend/internal/core/config"
 
 func getPromRuleConfig() (string, string) {
 	cfg := config.GetConfig()

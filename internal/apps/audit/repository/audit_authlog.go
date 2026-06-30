@@ -2,8 +2,8 @@ package repository
 
 import (
 	"context"
-	"valyria-backend/internal/apps/audit/model"
-	pg "valyria-backend/internal/core/pagination"
+	"prom-lens-backend/internal/apps/audit/model"
+	pg "prom-lens-backend/internal/core/pagination"
 
 	"gorm.io/gorm"
 )

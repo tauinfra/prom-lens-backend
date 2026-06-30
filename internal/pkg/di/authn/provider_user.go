@@ -1,28 +1,25 @@
 package authn
 
 import (
-	"valyria-backend/internal/apps/authn/controller"
-	"valyria-backend/internal/apps/authn/repository"
-	"valyria-backend/internal/apps/authn/service"
+	"prom-lens-backend/internal/apps/authn/controller"
+	"prom-lens-backend/internal/apps/authn/repository"
+	"prom-lens-backend/internal/apps/authn/service"
 
 	"gorm.io/gorm"
 )
 
 type UserProvider struct {
-	Repo       *repository.UserRepository
-	Service    *service.UserService
+	Repo       repository.UserRepository
+	Service    service.UserManager
 	Controller *controller.UserController
 }
 
 func NewUserProvider(db *gorm.DB) *UserProvider {
-	// 初始化用户模块的依赖
-	userRepo := repository.NewUserRepository(db)
-	userService := service.NewUserService(db, userRepo)
-	userController := controller.NewUserController(userService)
-
+	repo := repository.NewUserRepository(db)
+	manager := service.NewUserManager(db, repo)
 	return &UserProvider{
-		Repo:       &userRepo,
-		Service:    &userService,
-		Controller: userController,
+		Repo:       repo,
+		Service:    manager,
+		Controller: controller.NewUserController(manager),
 	}
 }

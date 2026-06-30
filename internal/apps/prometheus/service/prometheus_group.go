@@ -3,11 +3,14 @@ package service
 import (
 	"context"
 	"errors"
-	"valyria-backend/internal/apps/prometheus/dto"
-	"valyria-backend/internal/apps/prometheus/model"
-	"valyria-backend/internal/apps/prometheus/repository"
-	"valyria-backend/internal/apps/prometheus/request"
-	pg "valyria-backend/internal/core/pagination"
+	"fmt"
+
+	prom "prom-lens-backend/internal/apps/prometheus"
+	"prom-lens-backend/internal/apps/prometheus/dto"
+	"prom-lens-backend/internal/apps/prometheus/model"
+	"prom-lens-backend/internal/apps/prometheus/repository"
+	"prom-lens-backend/internal/apps/prometheus/request"
+	pg "prom-lens-backend/internal/core/pagination"
 )
 
 // GroupManager 定义接口
@@ -37,9 +40,25 @@ func (s *groupManager) List(ctx context.Context, params pg.QueryParams) ([]dto.G
 	}
 	result := make([]dto.GroupDTO, 0, len(data))
 	for _, item := range data {
-		result = append(result, dto.ToGroupDTO(item))
+		groupDTO, err := s.toGroupDTO(ctx, item)
+		if err != nil {
+			return nil, pg.Pagination{}, err
+		}
+		result = append(result, groupDTO)
 	}
 	return result, pagination, nil
+}
+
+func (s *groupManager) toGroupDTO(ctx context.Context, item model.Group) (dto.GroupDTO, error) {
+	ruleCount, err := s.group.CountRules(ctx, item.ID)
+	if err != nil {
+		return dto.GroupDTO{}, err
+	}
+	recordCount, err := s.group.CountRecords(ctx, item.ID)
+	if err != nil {
+		return dto.GroupDTO{}, err
+	}
+	return dto.ToGroupDTO(item, ruleCount, recordCount), nil
 }
 
 func (s *groupManager) Get(ctx context.Context, id int) (dto.GroupDTO, error) {
@@ -47,10 +66,13 @@ func (s *groupManager) Get(ctx context.Context, id int) (dto.GroupDTO, error) {
 	if err != nil {
 		return dto.GroupDTO{}, err
 	}
-	return dto.ToGroupDTO(item), nil
+	return s.toGroupDTO(ctx, item)
 }
 
 func (s *groupManager) Create(ctx context.Context, req *request.CreateGroupRequest) error {
+	if !prom.IsAlertingRules(req.Type) && !prom.IsAlertingRecords(req.Type) {
+		return fmt.Errorf("invalid group type: %s", req.Type)
+	}
 	data := &model.Group{
 		Name:        req.Name,
 		Type:        req.Type,
@@ -65,6 +87,9 @@ func (s *groupManager) Update(ctx context.Context, id int, req *request.UpdateGr
 		data.Name = *req.Name
 	}
 	if req.Type != nil {
+		if !prom.IsAlertingRules(*req.Type) && !prom.IsAlertingRecords(*req.Type) {
+			return fmt.Errorf("invalid group type: %s", *req.Type)
+		}
 		data.Type = *req.Type
 	}
 	if req.Description != nil {
@@ -90,4 +115,3 @@ func (s *groupManager) Delete(ctx context.Context, id int) error {
 	}
 	return s.group.Delete(ctx, id)
 }
-

@@ -2,8 +2,8 @@ package repository
 
 import (
 	"context"
-	"valyria-backend/internal/apps/prometheus/model"
-	pg "valyria-backend/internal/core/pagination"
+	"prom-lens-backend/internal/apps/prometheus/model"
+	pg "prom-lens-backend/internal/core/pagination"
 
 	"gorm.io/gorm"
 )
@@ -12,6 +12,7 @@ import (
 type RuleRepository interface {
 	List(ctx context.Context, params pg.QueryParams) ([]model.Rule, pg.Pagination, error)
 	Get(ctx context.Context, id int) (model.Rule, error)
+	GetByGroupAndName(ctx context.Context, groupID int, name string) (model.Rule, error)
 	Create(ctx context.Context, data *model.Rule) error
 	Update(ctx context.Context, id int, data *model.Rule) error
 	Delete(ctx context.Context, id int) error
@@ -42,6 +43,12 @@ func (r *ruleRepository) Get(ctx context.Context, id int) (data model.Rule, err 
 	if err = r.db.WithContext(ctx).First(&data, id).Error; err != nil {
 		return data, err
 	}
+	return
+}
+
+// GetByGroupAndName 按组与规则名查询
+func (r *ruleRepository) GetByGroupAndName(ctx context.Context, groupID int, name string) (data model.Rule, err error) {
+	err = r.db.WithContext(ctx).Where("group_id = ? AND name = ?", groupID, name).First(&data).Error
 	return
 }
 

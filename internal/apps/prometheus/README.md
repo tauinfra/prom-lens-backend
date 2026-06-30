@@ -21,7 +21,7 @@ Target Group
       "labels": {
         "job": "node-exporter",
         "env": "prod",
-        "cluster": "valyria"
+        "cluster": "prom-lens"
       }
     }'
 

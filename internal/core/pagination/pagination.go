@@ -5,7 +5,10 @@ import (
 	"strings"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/schema"
 )
+
+const MaxPageSize = 100
 
 type QueryParams struct {
 	Page       int                    `json:"page" form:"page"`
@@ -69,17 +72,50 @@ func quoteField(field string) string {
 	return strings.Join(parts, ".")
 }
 
-// 应用排序
-func applySorting(query *gorm.DB, sortBy, sortOrder string) *gorm.DB {
-	if sortBy == "" {
-		return query
+func buildAllowedSortFields(s *schema.Schema) map[string]string {
+	if s == nil {
+		return nil
 	}
+	allowed := make(map[string]string)
+	for _, field := range s.Fields {
+		if field.DBName == "" {
+			continue
+		}
+		quoted := quoteField(field.DBName)
+		allowed[strings.ToLower(field.DBName)] = quoted
+		allowed[strings.ToLower(field.Name)] = quoted
+	}
+	return allowed
+}
 
-	order := sortBy
-	if sortOrder != "" {
-		order += " " + sortOrder
+func normalizeSortOrder(sortOrder string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(sortOrder)) {
+	case "", "asc":
+		return "ASC", nil
+	case "desc":
+		return "DESC", nil
+	default:
+		return "", fmt.Errorf("invalid sortOrder: must be asc or desc")
 	}
-	return query.Order(order)
+}
+
+// 应用排序（sortBy 仅允许模型字段白名单）
+func applySorting(query *gorm.DB, sortBy, sortOrder string, allowed map[string]string) (*gorm.DB, error) {
+	if sortBy == "" {
+		return query, nil
+	}
+	if len(allowed) == 0 {
+		return nil, fmt.Errorf("invalid sortBy: sorting is not supported")
+	}
+	quoted, ok := allowed[strings.ToLower(strings.TrimSpace(sortBy))]
+	if !ok {
+		return nil, fmt.Errorf("invalid sortBy: field is not allowed")
+	}
+	orderDir, err := normalizeSortOrder(sortOrder)
+	if err != nil {
+		return nil, err
+	}
+	return query.Order(quoted + " " + orderDir), nil
 }
 
 // 应用动态条件
@@ -142,6 +178,9 @@ func Paginate(tx *gorm.DB, data interface{}, params QueryParams) (Pagination, er
 	if params.Size <= 0 {
 		params.Size = 10
 	}
+	if params.Size > MaxPageSize {
+		params.Size = MaxPageSize
+	}
 
 	query := tx
 	// 兜底：只有没指定 Table 才用 Model
@@ -201,7 +240,12 @@ func Paginate(tx *gorm.DB, data interface{}, params QueryParams) (Pagination, er
 	}
 
 	// ---------- 8. 排序 ----------
-	query = applySorting(query, params.SortBy, params.SortOrder)
+	allowedSortFields := buildAllowedSortFields(query.Statement.Schema)
+	var sortErr error
+	query, sortErr = applySorting(query, params.SortBy, params.SortOrder, allowedSortFields)
+	if sortErr != nil {
+		return pagination, sortErr
+	}
 
 	// ---------- 9. Preload ----------
 	for _, preload := range params.Preloads {

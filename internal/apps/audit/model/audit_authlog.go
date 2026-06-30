@@ -16,5 +16,5 @@ type AuthLog struct {
 }
 
 func (AuthLog) TableName() string {
-	return "valyria_audit_auth_log"
+	return "prom_lens_audit_auth_log"
 }

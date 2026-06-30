@@ -1,9 +1,9 @@
 package audit
 
 import (
-	"valyria-backend/internal/apps/audit/controller"
-	"valyria-backend/internal/apps/audit/repository"
-	"valyria-backend/internal/apps/audit/service"
+	"prom-lens-backend/internal/apps/audit/controller"
+	"prom-lens-backend/internal/apps/audit/repository"
+	"prom-lens-backend/internal/apps/audit/service"
 
 	"gorm.io/gorm"
 )

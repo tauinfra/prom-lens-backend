@@ -4,7 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"valyria-backend/internal/apps/prometheus/model"
+	"prom-lens-backend/internal/apps/prometheus/model"
+	"prom-lens-backend/internal/core/logger"
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
@@ -29,13 +30,21 @@ func NewTargetSyncer(db *gorm.DB) TargetSyncer {
 func (s *configMapTargetSyncer) SyncTargetGroup(ctx context.Context, groupID int) error {
 	group, targets, err := s.fetchGroupWithTargets(ctx, groupID)
 	if err != nil {
+		logPromSyncFailed("target", groupID, "", "fetch_group", err)
 		return err
 	}
+
+	logger.Infof(
+		"[prom-sync] start resource=target groupID=%d groupName=%q targetCount=%d",
+		groupID, group.Name, len(targets),
+	)
+
 	data, err := s.buildTargetGroupJSON(group, targets)
 	if err != nil {
+		logPromSyncFailed("target", groupID, group.Name, "build_json", err)
 		return err
 	}
-	return s.syncToConfigMap(ctx, group.Name, data)
+	return s.syncTargetToConfigMap(ctx, groupID, group.Name, data)
 }
 
 type targetConfig struct {
@@ -89,15 +98,18 @@ func (s *configMapTargetSyncer) fetchGroupWithTargets(ctx context.Context, group
 	return group, targets, nil
 }
 
-func (s *configMapTargetSyncer) syncToConfigMap(ctx context.Context, groupName string, data []byte) error {
+func (s *configMapTargetSyncer) syncTargetToConfigMap(ctx context.Context, groupID int, groupName string, data []byte) error {
 	client, err := clientSet()
 	if err != nil {
+		logPromSyncFailed("target", groupID, groupName, "k8s_client", err)
 		return err
 	}
 	promNamespace, promConfigMap := getPromTargetConfig()
-	// 获取配置
+	key := fmt.Sprintf("%s.json", groupName)
+
 	cm, err := client.CoreV1().ConfigMaps(promNamespace).Get(ctx, promConfigMap, metav1.GetOptions{})
 	if err != nil {
+		logPromSyncFailed("target", groupID, groupName, "get_configmap", err)
 		return err
 	}
 
@@ -105,9 +117,12 @@ func (s *configMapTargetSyncer) syncToConfigMap(ctx context.Context, groupName s
 		cm.Data = make(map[string]string)
 	}
 
-	key := fmt.Sprintf("%s.json", groupName)
 	cm.Data[key] = string(data)
-	// 更新配置
-	_, err = client.CoreV1().ConfigMaps(promNamespace).Update(ctx, cm, metav1.UpdateOptions{})
-	return err
+	if _, err = client.CoreV1().ConfigMaps(promNamespace).Update(ctx, cm, metav1.UpdateOptions{}); err != nil {
+		logPromSyncFailed("target", groupID, groupName, "update_configmap", err)
+		return err
+	}
+
+	logPromSyncSuccess("target", promNamespace, promConfigMap, key, len(data))
+	return nil
 }

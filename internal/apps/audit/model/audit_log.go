@@ -20,5 +20,5 @@ type AuditLog struct {
 }
 
 func (AuditLog) TableName() string {
-	return "valyria_audit_log"
+	return "prom_lens_audit_log"
 }

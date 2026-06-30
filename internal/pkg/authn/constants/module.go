@@ -1,6 +1,6 @@
 package constants
 
 const (
-	ModuleUser  = "user"
+	ModuleUser  = "users"
 	ModuleAuthn = "authn"
 )

@@ -1,13 +1,18 @@
 package dto
 
-import "valyria-backend/internal/apps/prometheus/model"
+import (
+	prom "prom-lens-backend/internal/apps/prometheus"
+	"prom-lens-backend/internal/apps/prometheus/model"
+)
 
-func ToGroupDTO(item model.Group) GroupDTO {
+func ToGroupDTO(item model.Group, ruleCount, recordCount int64) GroupDTO {
 	return GroupDTO{
 		ID:          item.ID,
 		Name:        item.Name,
 		Type:        item.Type,
 		Description: item.Description,
+		RuleCount:   ruleCount,
+		RecordCount: recordCount,
 		CreatedAt:   item.CreatedAt,
 		UpdatedAt:   item.UpdatedAt,
 	}
@@ -33,8 +38,9 @@ func ToRuleDTO(item model.Rule) RuleDTO {
 		Description: item.Description,
 		Expr:        item.Expr,
 		For:         item.For,
-		Labels:      item.Labels,
-		Status:      item.Status,
+		Labels:            item.Labels,
+		ExtraAnnotations:  prom.NormalizeExtraAnnotations(item.ExtraAnnotations),
+		Status:            item.Status,
 		CreatedAt:   item.CreatedAt,
 		UpdatedAt:   item.UpdatedAt,
 	}

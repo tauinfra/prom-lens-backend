@@ -17,5 +17,5 @@ type TargetGroup struct {
 }
 
 func (TargetGroup) TableName() string {
-	return "valyria_prometheus_target_group"
+	return "prom_lens_prometheus_target_group"
 }

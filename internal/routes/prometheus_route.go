@@ -1,7 +1,7 @@
 package routes
 
 import (
-	"valyria-backend/internal/pkg/di"
+	"prom-lens-backend/internal/pkg/di"
 
 	"github.com/gin-gonic/gin"
 )
@@ -36,6 +36,9 @@ func PrometheusRouters(rg *gin.RouterGroup, provider *di.Provider) {
 		prometheus.POST("/groups/:groupID/records", provider.Prometheus.Record.Controller.Create)
 		prometheus.PATCH("/groups/:groupID/records/:recordID", provider.Prometheus.Record.Controller.Update)
 		prometheus.DELETE("/groups/:groupID/records/:recordID", provider.Prometheus.Record.Controller.Delete)
+
+		// Sync Routes
+		prometheus.POST("/sync/import-rules", provider.Prometheus.Sync.Controller.ImportRules)
 
 		// Rule Routes
 		prometheus.GET("/groups/:groupID/rules", provider.Prometheus.Rule.Controller.List)

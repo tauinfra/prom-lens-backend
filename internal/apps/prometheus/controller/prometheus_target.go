@@ -3,10 +3,10 @@ package controller
 import (
 	"net/http"
 	"strconv"
-	"valyria-backend/internal/apps/prometheus/request"
-	"valyria-backend/internal/apps/prometheus/service"
-	pg "valyria-backend/internal/core/pagination"
-	"valyria-backend/internal/pkg/ginhelper"
+	"prom-lens-backend/internal/apps/prometheus/request"
+	"prom-lens-backend/internal/apps/prometheus/service"
+	pg "prom-lens-backend/internal/core/pagination"
+	"prom-lens-backend/internal/pkg/ginhelper"
 
 	"github.com/gin-gonic/gin"
 )

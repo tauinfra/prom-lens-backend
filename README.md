@@ -1,93 +1,306 @@
-# Valyria Backend
+# Prom Lens Backend
 
-Valyria 后端服务：统一提供认证鉴权、多集群 Kubernetes 管理、发布流水线（Dragon）、仪表盘与审计等能力。
+Prometheus 规则与告警通知管理后端：提供认证鉴权、审计日志、Prometheus/Thanos 规则与采集目标配置（同步 K8s ConfigMap）、Lark 告警通知通道及 Alertmanager receiver/route 自动同步。
 
 ## 技术栈
 
 - **语言**: Go 1.24+
 - **Web 框架**: Gin
 - **ORM**: GORM
-- **数据库**: MySQL
-- **缓存**: Redis
-- **认证**: JWT（Access Token + Refresh Token）
-- **Kubernetes**: client-go，支持多集群
-- **流水线**: Tekton Pipeline / Task / TaskRun
+- **数据库**: MySQL（库名默认 `prom_lens`，表前缀 `prom_lens_`）
+- **认证**: JWT（Access Token + Refresh Token，HS512）
+- **Kubernetes**: client-go（规则 / 采集目标 / Alertmanager 配置同步）
 
-## 项目结构概览
+## 项目结构
 
 ```
 cmd/server/                 # 程序入口
-config/                     # 配置文件（如 config.yaml）
+config/
+  config.example.yaml       # 配置模板（复制为 config.yaml 后修改）
+  migrations/               # 数据库迁移 SQL（手工执行）
 internal/
   apps/
-    authn/                  # 认证与权限（用户、角色、菜单、权限）
-    audit/                  # 审计（登录审计、操作审计）
-    dashboard/              # 仪表盘（集群/流水线汇总、趋势、最近发布等）
-    dragon/                 # 发布平台（项目、环境、流水线、发布、审批）
-    kubernetes/             # 多集群 K8s 管理（集群、节点、命名空间、工作负载等）
-  core/                     # 配置、数据库、日志、分页等基础设施
-  pkg/
-    di/                     # 依赖注入与各模块 Provider
-    encryption/             # 敏感信息加密
+    authn/                  # 登录、改密、用户资料、用户管理
+    audit/                  # 登录审计、操作审计
+    prometheus/             # 规则组、规则、记录、采集目标；K8s 正向同步与反向导入
+    alerting/               # 通知通道、Lark 转发、Alertmanager 同步
+  core/                     # 配置、数据库、日志、分页、中间件
+  pkg/di/                   # 依赖注入
   routes/                   # 路由注册
 ```
 
-## 实现功能
+## 功能模块
 
-### 1. 认证与权限（`/api/v1/authn`）
+### 认证（`/api/v1/authn`）
 
-- 登录、刷新 Token、修改密码
-- 用户、角色、菜单、权限的 CRUD
-- 用户关联角色/菜单、角色关联权限
-- 按用户返回前端路由（`/me/routes`）
+- `POST /login` — 登录
+- `POST /refresh-token` — 刷新 Token
+- `POST /me/change-password` — 修改密码
+- `GET /me/profile` — 当前用户资料
 
-### 2. 审计（`/api/v1/audit`）
+**用户管理（需 JWT + 超级管理员）**
 
-- 登录审计日志（`/audit/auth-logs`）
-- 操作审计日志（`/audit/logs`）
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/users` | 用户列表（`page`/`size`/`sortBy`/`sortOrder`/`keyword`） |
+| GET | `/users/:userID` | 用户详情 |
+| POST | `/users` | 创建用户 |
+| PATCH | `/users/:userID` | 更新用户 |
+| DELETE | `/users/:userID` | 删除用户 |
+| POST | `/users/:userID/reset-password` | 重置密码 |
 
-### 3. 仪表盘（`/api/v1/dashboard`）
+创建用户 body 示例：
 
-- **总览**: 集群数、节点数、命名空间数、Pod 数；今日发布总数/成功/失败/回滚（resources 预留）
-- **流水线趋势**: `/dashboard/pipelines/trend?range=today|7d|30d`，按小时或按天统计成功/失败/回滚
-- **最近发布**: `/dashboard/pipelines/recent?env=prod&limit=10`，按环境取每个 pipeline 最近一次发布
-- **项目统计**: `/dashboard/pipelines/projects`，按项目统计发布次数、pipeline 数、成功/失败/回滚次数
+```json
+{
+  "username": "ops",
+  "password": "secret123",
+  "nickname": "运维",
+  "email": "ops@example.com",
+  "phone": "13800138000",
+  "isActive": true,
+  "isSuperuser": false
+}
+```
 
-### 4. Kubernetes 多集群管理（`/api/v1/kubernetes`）
+### 审计（`/api/v1/audit`）
 
-- 集群管理：增删改查、Token 更新
-- 权限：K8s 资源权限的同步与 CRUD（含批量）
-- 按集群管理：节点、命名空间、Deployment、StatefulSet、DaemonSet、ReplicaSet、Pod、Service、ConfigMap、Secret、HPA、Ingress、RBAC（Role/RoleBinding/ClusterRole/ClusterRoleBinding）、ServiceAccount、StorageClass、PV/PVC、Event 等
-- Tekton：Task、TaskRun、Pipeline、PipelineRun
-- 后台 Worker：K8s 权限同步、HPA 扩缩容历史同步
+- `GET /auth-logs` — 登录审计
+- `GET /logs` — 操作审计
 
-### 5. 发布平台 Dragon（`/api/v1/dragon`）
+### Prometheus 配置（`/api/v1/prometheus`）
 
-- 项目、环境、流水线、流水线 ACL 的 CRUD
-- 发布（Release）：创建发布、回滚、查看日志、删除
-- 审批：发布评审（Review）、评审阶段配置（Review Stage）
-- 凭证与 GitLab 集成：凭证管理、GitLab 配置
-- 报告：`/reports/summary`
+- **规则组** `groups`：类型为 `ALERTING RULES` 或 `ALERTING RECORDS`（含空格）
+- **告警规则** `groups/:groupID/rules`、**记录规则** `groups/:groupID/records`
+- **采集目标组** `target-groups`、**采集目标** `target-groups/:groupID/targets`
+- **反向导入** `POST /sync/import-rules` — 从 ConfigMap 导入规则（仅新增）
 
-### 6. Prometheus 配置管理（`/api/v1/prometheus`）
+CRUD 后自动将规则/采集配置同步到 K8s ConfigMap（见 `config.yaml` 中 `prometheus.rule` / `prometheus.target`）。
 
-- 分组（Group）、目标组（Target Group）、目标（Target）
-- 记录（Record）、规则（Rule）的 CRUD  
-（与 ConfigMap 等联动，用于 Prometheus 监控配置）
+规则 `annotations` 支持 `summary`、`description` 及 `extraAnnotations`（合并写入 YAML）。
 
-## 配置与运行
+更多 curl 示例见 [internal/apps/prometheus/README.md](internal/apps/prometheus/README.md)。
 
-### 配置
+### 告警通知（`/api/v1/alerting`）
 
-- 默认配置文件：`config/config.yaml`
-- 启动参数：`-c config/config.yaml` 指定配置文件
-- 主要配置项：服务端口、JWT、数据库、Redis、日志、Kubernetes 超时/QPS、Dragon Kustomize、权限 Worker 等
+**管理接口（需 JWT）**
 
-### 运行
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/webhooks` | 通道列表 |
+| GET | `/webhooks/:webhookID` | 通道详情 |
+| POST | `/webhooks` | 创建通道（可选 route matchers，自动同步 AM） |
+| PATCH | `/webhooks/:webhookID` | 更新通道 |
+| DELETE | `/webhooks/:webhookID` | 删除通道（仅 superuser） |
+| POST | `/webhooks/verify` | 验证 Lark Webhook（不落库） |
+| POST | `/sync/receivers` | 全量同步 Alertmanager receivers/routes |
+
+**回调接口（免 JWT）**
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/webhook/:channel` | Alertmanager 回调，需 `Authorization: Bearer <callbackToken>` |
+
+#### 告警链路
+
+```
+Prometheus/Thanos Ruler → Alertmanager（route 匹配）
+    → POST Prom Lens /api/v1/alerting/webhook/:channel（Bearer）
+    → Lark 卡片通知
+```
+
+创建通道时：
+
+1. 写入 DB（`webhook` + 可选 `route` / `matchers`）
+2. 自动生成 `callbackToken`
+3. 同步 Alertmanager ConfigMap：`receivers` + `route.routes`（`matchers` 格式，非 deprecated `match`）
+4. 创建时若 AM 同步失败且已配置同步，**回滚**通道记录
+
+#### 创建通道请求示例
+
+```json
+{
+  "name": "hk-test",
+  "url": "https://open.larksuite.com/open-apis/bot/v2/hook/xxx",
+  "description": "测试通道",
+  "enabled": true,
+  "route": {
+    "priority": 10,
+    "continue": false,
+    "matchers": [
+      { "label": "env", "operator": "=", "value": "prod" },
+      { "label": "team", "operator": "=", "value": "ops" }
+    ]
+  }
+}
+```
+
+响应含 `data.callbackToken` 与 `amSync`（同步结果）。
+
+#### Alertmanager receiver 配置（自动同步结果）
+
+```yaml
+receivers:
+  - name: hk-test
+    webhook_configs:
+      - url: http://<prom-lens-host>:8081/api/v1/alerting/webhook/hk-test
+        send_resolved: true
+        http_config:
+          bearer_token: <callbackToken>
+
+route:
+  routes:
+    - receiver: hk-test
+      matchers:
+        - env="prod"
+        - team="ops"
+      continue: false
+```
+
+#### 直接投递 Alertmanager 测试（不经过规则）
 
 ```bash
-# 依赖：MySQL、Redis 已就绪，并已初始化数据库
+NOW=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+kubectl exec -n monitoring deploy/alertmanager -- wget -qO- \
+  --header='Content-Type: application/json' \
+  --post-data='[{"labels":{"alertname":"DirectAMRouteTest","env":"prod","team":"ops"},"annotations":{"summary":"路由测试"},"startsAt":"'"${NOW}"'"}]' \
+  http://localhost:9093/api/v2/alerts
+```
+
+#### 模拟 Prom Lens 回调
+
+```bash
+curl -X POST "http://<prom-lens-host>:8081/api/v1/alerting/webhook/hk-test" \
+  -H "Authorization: Bearer <callbackToken>" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"firing","receiver":"hk-test","alerts":[{"status":"firing","labels":{"alertname":"Test"},"annotations":{"summary":"测试"},"startsAt":"2026-01-01T00:00:00Z"}]}'
+```
+
+## 权限说明
+
+- 所有 `/api/v1` 接口默认需 JWT（白名单除外）
+- **DELETE** 请求仅 **superuser**（JWT 中 `su=true`）可执行
+- Alertmanager 回调仅校验 Bearer `callbackToken`，不走 JWT
+
+## 健康检查
+
+| 路径 | 说明 | 鉴权 |
+|------|------|------|
+| `GET /health` | 存活探针 | 免鉴权 |
+| `GET /readyz` | 就绪探针（含 DB ping） | 免鉴权 |
+
+## 配置
+
+复制模板并修改本地配置（`config/config.yaml` 已加入 `.gitignore`，不会提交密钥）：
+
+```bash
+cp config/config.example.yaml config/config.yaml
+```
+
+默认读取 `config/config.yaml`，启动参数 `-c` 可指定其他路径。
+
+环境变量前缀：`PROM_LENS_`，嵌套用下划线，例如：
+
+```bash
+export PROM_LENS_SERVER_PORT=8081
+export PROM_LENS_DATABASE_PASSWORD=your-password
+export PROM_LENS_APP_JWT_SECRET=your-secret-at-least-16-chars
+export PROM_LENS_BASE_URL=http://your-host:8081
+```
+
+主要配置项：
+
+```yaml
+server:
+  port: 8081
+
+base_url: "http://127.0.0.1:8081"   # 对外访问地址，AM 回调用；环境变量 PROM_LENS_BASE_URL
+
+app:
+  jwt_secret: "<生产环境请用环境变量注入>"
+
+auth:
+  access_token_expires: 1h
+  refresh_token_expires: 24h
+  whitelist:                    # 免 JWT 路径前缀
+    - /api/v1/authn/login
+    - /api/v1/authn/refresh-token
+    - /api/v1/alerting/webhook/
+    - /health
+    - /readyz
+
+database:
+  host: "127.0.0.1"
+  dbname: "prom_lens"
+  # ...
+
+prometheus:
+  target:
+    namespace: monitoring-test
+    configmap: prometheus-targets
+  rule:
+    namespace: thanos
+    configmap: thanos-ruler-config
+
+alerting:
+  lark_timeout: 10s
+  alertmanager:
+    namespace: monitoring
+    configmap: alertmanager-config
+    config_key: alertmanager.yml
+    default_receiver: ""                            # 可选，写入根 route.receiver
+```
+
+`base_url`（`PROM_LENS_BASE_URL`）必须为 Alertmanager Pod **能访问**的地址（建议 K8s Service 或稳定内网 IP，不要用 `localhost`）。
+
+## 数据库迁移
+
+迁移脚本位于 `config/migrations/`，需**手工执行**（无内置 migrate 工具）。
+
+### 新环境（推荐顺序）
+
+```bash
+mysql ... < config/migrations/00_database.sql
+mysql ... prom_lens < config/migrations/authn_init.sql
+mysql ... prom_lens < config/migrations/audit_init.sql
+mysql ... prom_lens < config/migrations/prometheus_init.sql
+mysql ... prom_lens < config/migrations/alerting_init.sql
+mysql ... prom_lens < config/migrations/authn_admin_seed.sql   # 默认 admin，上线后务必改密
+```
+
+各模块 `*_init.sql` 为完整建表脚本；`alerting_init.sql` 已含 `callback_token`、`route`、`route_matcher`。
+
+### 已有环境升级
+
+执行 `upgrade_legacy.sql`，按当前库结构跳过已完成的步骤（重复执行可能报错，属正常）。
+
+```bash
+mysql ... prom_lens < config/migrations/upgrade_legacy.sql
+```
+
+## 运行
+
+```bash
+# 依赖：MySQL 已就绪并完成迁移
 go run ./cmd/server -c config/config.yaml
 ```
 
-默认监听 `http://localhost:8080`，API 前缀为 `/api/v1`。登录、刷新 Token、健康检查、指标等路径可在配置中加入白名单免鉴权。
+默认监听 `http://localhost:8081`，API 前缀 `/api/v1`。
+
+```bash
+# 编译
+go build -o bin/prom-lens-backend ./cmd/server
+```
+
+## 日志
+
+- 规则同步：`[prom-sync]`
+- 规则导入：`[prom-import]`
+- Alertmanager 同步：`[am-sync]`
+- Lark 通知：`[alert-notify]`
+
+日志目录默认 `logs/`（`config.yaml` 中 `logging.log_dir`）。
+
+## 模块说明
+
+Go module 名为 `prom-lens-backend`，与仓库名一致。

@@ -1,7 +1,7 @@
 package routes
 
 import (
-	"valyria-backend/internal/pkg/di"
+	"prom-lens-backend/internal/pkg/di"
 
 	"github.com/gin-gonic/gin"
 )

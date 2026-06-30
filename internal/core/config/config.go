@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
-	"valyria-backend/internal/core/logger"
+	"prom-lens-backend/internal/core/logger"
 
 	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
@@ -18,92 +18,14 @@ type ConfigChange struct {
 }
 
 type Config struct {
-	Server           ServerConfig           `mapstructure:"server"`
-	Database         DatabaseConfig         `mapstructure:"database"`
-	Redis            RedisConfig            `mapstructure:"redis"`
-	Auth             AuthConfig             `mapstructure:"auth"`
-	Log              LogConfig              `mapstructure:"logging"`
-	K8s              K8sConfig              `mapstructure:"kubernetes"`
-	App              AppConfig              `mapstructure:"app"`
-	Prometheus       PrometheusConfig       `mapstructure:"prometheus"`
-	Dragon           DragonConfig           `mapstructure:"dragon"`
-	PermissionWorker PermissionWorkerConfig `mapstructure:"permission_worker"`
-}
-
-// PermissionWorkerConfig K8s 权限同步 Worker 配置（config.yaml permission_worker）
-// 所有字段均可选，未配置或无效时 Parse() 使用默认值
-type PermissionWorkerConfig struct {
-	ScanInterval string `mapstructure:"scan_interval"` // 扫描间隔，如 "10s", "2m"
-	BatchSize    int    `mapstructure:"batch_size"`   // 每批拉取条数，建议 10～1000
-	WorkerCount  int    `mapstructure:"worker_count"` // 预留：未来并行处理协程数，当前未使用
-	MaxRetry     int    `mapstructure:"max_retry"`    // 最大重试次数，达此后置为 dead
-	BaseDelay    string `mapstructure:"base_delay"`   // 退避基准，如 "10s"；退避公式 base_delay * 2^retry
-	MaxDelay     string `mapstructure:"max_delay"`    // 退避上限，如 "15m"
-}
-
-// ParsedPermissionWorker 解析后的 Worker 配置（duration 已解析，零值已填默认）
-type ParsedPermissionWorker struct {
-	ScanInterval time.Duration
-	BatchSize    int
-	WorkerCount  int
-	MaxRetry     int
-	BaseDelay    time.Duration
-	MaxDelay     time.Duration
-}
-
-const (
-	permissionWorkerMaxBatchSize = 1000 // batch_size 上限，防止误配过大
-)
-
-// Parse 解析并返回可用配置，无效或零值使用默认；batch_size 限制在 1～permissionWorkerMaxBatchSize
-func (c *PermissionWorkerConfig) Parse() ParsedPermissionWorker {
-	const (
-		defaultScanInterval = 2 * time.Minute
-		defaultBatchSize   = 100
-		defaultWorkerCount = 1
-		defaultMaxRetry    = 5
-		defaultBaseDelay   = 1 * time.Minute
-		defaultMaxDelay    = 15 * time.Minute
-	)
-	out := ParsedPermissionWorker{
-		BatchSize:    defaultBatchSize,
-		WorkerCount:  defaultWorkerCount,
-		MaxRetry:     defaultMaxRetry,
-		ScanInterval: defaultScanInterval,
-		BaseDelay:    defaultBaseDelay,
-		MaxDelay:     defaultMaxDelay,
-	}
-	if c.BatchSize > 0 {
-		out.BatchSize = c.BatchSize
-		if out.BatchSize > permissionWorkerMaxBatchSize {
-			out.BatchSize = permissionWorkerMaxBatchSize
-		}
-	}
-	if c.WorkerCount > 0 {
-		out.WorkerCount = c.WorkerCount
-	}
-	if c.MaxRetry > 0 {
-		out.MaxRetry = c.MaxRetry
-	}
-	if c.ScanInterval != "" {
-		if d, err := time.ParseDuration(c.ScanInterval); err == nil && d > 0 {
-			out.ScanInterval = d
-		}
-	}
-	if c.BaseDelay != "" {
-		if d, err := time.ParseDuration(c.BaseDelay); err == nil && d >= 0 {
-			out.BaseDelay = d
-		}
-	}
-	if c.MaxDelay != "" {
-		if d, err := time.ParseDuration(c.MaxDelay); err == nil && d > 0 {
-			out.MaxDelay = d
-		}
-	}
-	if out.MaxDelay > 0 && out.BaseDelay > out.MaxDelay {
-		out.MaxDelay = out.BaseDelay // 保证 max_delay >= base_delay
-	}
-	return out
+	Server     ServerConfig     `mapstructure:"server"`
+	Database   DatabaseConfig   `mapstructure:"database"`
+	Auth       AuthConfig       `mapstructure:"auth"`
+	Log        LogConfig        `mapstructure:"logging"`
+	App        AppConfig        `mapstructure:"app"`
+	BaseURL    string           `mapstructure:"base_url"`
+	Prometheus PrometheusConfig `mapstructure:"prometheus"`
+	Alerting   AlertingConfig   `mapstructure:"alerting"`
 }
 
 type ServerConfig struct {
@@ -123,21 +45,12 @@ type DatabaseConfig struct {
 	ConnMaxLifetime time.Duration `mapstructure:"conn_max_lifetime"`
 }
 
-type RedisConfig struct {
-	Addr     string `mapstructure:"addr"`
-	Password string `mapstructure:"password"`
-	DB       int    `mapstructure:"db"`
-	PoolSize int    `mapstructure:"pool_size"`
-}
-
 type AuthConfig struct {
 	AccessTokenExpires  time.Duration `mapstructure:"access_token_expires"`
 	RefreshTokenExpires time.Duration `mapstructure:"refresh_token_expires"`
 	Whitelist           []string      `mapstructure:"whitelist"`
 	Issuer              string        `mapstructure:"issuer"`
 	Audience            string        `mapstructure:"audience"`
-	LoginMaxRetries     int           `mapstructure:"login_max_retries"`
-	LoginLockWindow     time.Duration `mapstructure:"login_lock_window"`
 }
 
 type LogConfig struct {
@@ -153,36 +66,8 @@ type LogConfig struct {
 }
 
 type AppConfig struct {
-	JWTSecret     string `mapstructure:"jwt_secret"`
-	JWTExpire     string `mapstructure:"jwt_expire"`
-	EncryptionKey string `mapstructure:"encryption_key"`
-}
-
-type K8sConfig struct {
-	Timeout int     `mapstructure:"timeout"`
-	QPS     float32 `mapstructure:"qps"`
-	Burst   int     `mapstructure:"burst"`
-	ArgoCD  ArgoCDConfig `mapstructure:"argocd"`
-	Tekton  TektonConfig `mapstructure:"tekton"`
-	Actions []string `mapstructure:"actions"`
-}
-
-type DragonConfig struct {
-	Kustomize KustomizeConfig `mapstructure:"kustomize"`
-}
-
-type ArgoCDConfig struct {
-	Server   string `mapstructure:"server"`
-	Insecure bool   `mapstructure:"insecure"`
-}
-
-type KustomizeConfig struct {
-	RepoURL string `mapstructure:"repo_url"`
-	Branch  string `mapstructure:"branch"`
-}
-
-type TektonConfig struct {
-	Namespace string `mapstructure:"namespace"`
+	JWTSecret string `mapstructure:"jwt_secret"`
+	JWTExpire string `mapstructure:"jwt_expire"`
 }
 
 type PrometheusConfig struct {
@@ -200,30 +85,42 @@ type PrometheusRuleConfig struct {
 	ConfigMap string `mapstructure:"configmap"`
 }
 
+type AlertingConfig struct {
+	LarkTimeout  time.Duration          `mapstructure:"lark_timeout"`
+	Alertmanager AlertmanagerSyncConfig `mapstructure:"alertmanager"`
+}
+
+type AlertmanagerSyncConfig struct {
+	Namespace       string `mapstructure:"namespace"`
+	ConfigMap       string `mapstructure:"configmap"`
+	ConfigKey         string `mapstructure:"config_key"`
+	DefaultReceiver string `mapstructure:"default_receiver"`
+}
+
 var C *Config // Deprecated: 使用 InitConfig 返回的配置，全局变量仅用于向后兼容
 
 // InitConfig 初始化配置
 // 支持通过环境变量覆盖配置值，环境变量命名规则：
-//   - 前缀：VALYRIA_
+//   - 前缀：PROM_LENS_
 //   - 嵌套结构使用下划线分隔，例如：
-//     VALYRIA_SERVER_PORT -> server.port
-//     VALYRIA_DATABASE_HOST -> database.host
-//     VALYRIA_AUTH_ACCESS_TOKEN_EXPIRES -> auth.access_token_expires
+//     PROM_LENS_SERVER_PORT -> server.port
+//     PROM_LENS_DATABASE_HOST -> database.host
+//     PROM_LENS_AUTH_ACCESS_TOKEN_EXPIRES -> auth.access_token_expires
 //   - 数组类型暂不支持通过环境变量设置
 //
 // 示例：
 //
-//	export VALYRIA_SERVER_PORT=9090
-//	export VALYRIA_DATABASE_HOST=192.168.1.1
-//	export VALYRIA_DATABASE_PASSWORD=mypassword
+//	export PROM_LENS_SERVER_PORT=9090
+//	export PROM_LENS_DATABASE_HOST=192.168.1.1
+//	export PROM_LENS_DATABASE_PASSWORD=mypassword
 func InitConfig(cfgFile string) (*Config, error) {
 	viper.SetConfigFile(cfgFile)
 
 	// 设置环境变量前缀
-	viper.SetEnvPrefix("VALYRIA_")
+	viper.SetEnvPrefix("PROM_LENS_")
 	// 设置环境变量键名替换器：将点号替换为下划线，支持嵌套结构
-	// 例如：VALYRIA_SERVER_PORT -> server.port
-	//      VALYRIA_DATABASE_HOST -> database.host
+	// 例如：PROM_LENS_SERVER_PORT -> server.port
+	//      PROM_LENS_DATABASE_HOST -> database.host
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	// 自动读取环境变量
 	viper.AutomaticEnv()
@@ -349,22 +246,6 @@ func detectConfigChanges(old, new *Config) []ConfigChange {
 		})
 	}
 
-	// 检测 Redis 配置变更
-	if old.Redis.Addr != new.Redis.Addr {
-		changes = append(changes, ConfigChange{
-			Key:      "redis.addr",
-			OldValue: old.Redis.Addr,
-			NewValue: new.Redis.Addr,
-		})
-	}
-	if old.Redis.DB != new.Redis.DB {
-		changes = append(changes, ConfigChange{
-			Key:      "redis.db",
-			OldValue: old.Redis.DB,
-			NewValue: new.Redis.DB,
-		})
-	}
-
 	// 检测 Auth 配置变更
 	if old.Auth.AccessTokenExpires != new.Auth.AccessTokenExpires {
 		changes = append(changes, ConfigChange{
@@ -394,21 +275,6 @@ func detectConfigChanges(old, new *Config) []ConfigChange {
 			NewValue: new.Auth.Audience,
 		})
 	}
-	if old.Auth.LoginMaxRetries != new.Auth.LoginMaxRetries {
-		changes = append(changes, ConfigChange{
-			Key:      "auth.login_max_retries",
-			OldValue: old.Auth.LoginMaxRetries,
-			NewValue: new.Auth.LoginMaxRetries,
-		})
-	}
-	if old.Auth.LoginLockWindow != new.Auth.LoginLockWindow {
-		changes = append(changes, ConfigChange{
-			Key:      "auth.login_lock_window",
-			OldValue: old.Auth.LoginLockWindow,
-			NewValue: new.Auth.LoginLockWindow,
-		})
-	}
-
 	// 检测 App 配置变更（敏感信息只显示是否变更，不显示值）
 	if old.App.JWTSecret != new.App.JWTSecret {
 		changes = append(changes, ConfigChange{
@@ -417,14 +283,6 @@ func detectConfigChanges(old, new *Config) []ConfigChange {
 			NewValue: "[REDACTED]",
 		})
 	}
-	if old.App.EncryptionKey != new.App.EncryptionKey {
-		changes = append(changes, ConfigChange{
-			Key:      "app.encryption_key",
-			OldValue: "[REDACTED]",
-			NewValue: "[REDACTED]",
-		})
-	}
-
 	// 检测 Log 配置变更
 	if old.Log.LogLevel != new.Log.LogLevel {
 		changes = append(changes, ConfigChange{
@@ -500,17 +358,6 @@ func (c *Config) Validate() error {
 		errors = append(errors, "database.conn_max_lifetime must be >= 0")
 	}
 
-	// 验证 Redis
-	if c.Redis.Addr == "" {
-		errors = append(errors, "redis.addr is required")
-	}
-	if c.Redis.DB < 0 || c.Redis.DB > 15 {
-		errors = append(errors, "redis.db must be between 0 and 15")
-	}
-	if c.Redis.PoolSize < 0 {
-		errors = append(errors, "redis.pool_size must be >= 0")
-	}
-
 	// 验证 Auth
 	if c.Auth.AccessTokenExpires <= 0 {
 		errors = append(errors, "auth.access_token_expires must be > 0")
@@ -521,41 +368,12 @@ func (c *Config) Validate() error {
 	if c.Auth.RefreshTokenExpires <= c.Auth.AccessTokenExpires {
 		errors = append(errors, "auth.refresh_token_expires must be > auth.access_token_expires")
 	}
-	if c.Auth.LoginMaxRetries < 0 {
-		errors = append(errors, "auth.login_max_retries must be >= 0")
-	}
-	if c.Auth.LoginLockWindow < 0 {
-		errors = append(errors, "auth.login_lock_window must be >= 0")
-	}
-
 	// 验证 App
 	if c.App.JWTSecret == "" {
 		errors = append(errors, "app.jwt_secret is required")
 	}
 	if len(c.App.JWTSecret) < 16 {
 		errors = append(errors, "app.jwt_secret must be at least 16 characters")
-	}
-	if c.App.EncryptionKey == "" {
-		errors = append(errors, "app.encryption_key is required")
-	}
-	if len(c.App.EncryptionKey) != 64 {
-		errors = append(errors, "app.encryption_key must be 64 characters (32 bytes hex)")
-	}
-
-	// 验证 Tekton
-	if c.K8s.Tekton.Namespace == "" {
-		errors = append(errors, "kubernetes.tekton.namespace is required")
-	}
-
-	// 验证 K8s
-	if c.K8s.Timeout < 0 {
-		errors = append(errors, "kubernetes.timeout must be >= 0")
-	}
-	if c.K8s.QPS < 0 {
-		errors = append(errors, "kubernetes.qps must be >= 0")
-	}
-	if c.K8s.Burst < 0 {
-		errors = append(errors, "kubernetes.burst must be >= 0")
 	}
 
 	// 验证 Prometheus
@@ -570,29 +388,6 @@ func (c *Config) Validate() error {
 	}
 	if c.Prometheus.Rule.ConfigMap == "" {
 		errors = append(errors, "prometheus.rule.configmap is required")
-	}
-
-	// 验证 permission_worker（可选段，若配置了则校验范围；0 表示使用默认值）
-	if c.PermissionWorker.BatchSize < 0 || c.PermissionWorker.BatchSize > permissionWorkerMaxBatchSize*2 {
-		errors = append(errors, fmt.Sprintf("permission_worker.batch_size must be 0 (default) or 1～%d", permissionWorkerMaxBatchSize*2))
-	}
-	if c.PermissionWorker.MaxRetry < 0 || c.PermissionWorker.MaxRetry > 100 {
-		errors = append(errors, "permission_worker.max_retry must be 0 (default) or 1～100")
-	}
-	if c.PermissionWorker.ScanInterval != "" {
-		if d, err := time.ParseDuration(c.PermissionWorker.ScanInterval); err != nil || d <= 0 {
-			errors = append(errors, "permission_worker.scan_interval must be a positive duration (e.g. 10s, 2m)")
-		}
-	}
-	if c.PermissionWorker.BaseDelay != "" {
-		if d, err := time.ParseDuration(c.PermissionWorker.BaseDelay); err != nil || d < 0 {
-			errors = append(errors, "permission_worker.base_delay must be a non-negative duration (e.g. 10s)")
-		}
-	}
-	if c.PermissionWorker.MaxDelay != "" {
-		if d, err := time.ParseDuration(c.PermissionWorker.MaxDelay); err != nil || d < 0 {
-			errors = append(errors, "permission_worker.max_delay must be a non-negative duration (e.g. 15m)")
-		}
 	}
 
 	if len(errors) > 0 {

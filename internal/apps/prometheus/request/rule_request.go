@@ -8,8 +8,9 @@ type CreateRuleRequest struct {
 	Description string         `json:"description" binding:"required"`
 	Expr        string         `json:"expr" binding:"required"`
 	For         string         `json:"for" binding:"required"`
-	Labels      datatypes.JSON `json:"labels" binding:"required"`
-	Status      *bool          `json:"status"`
+	Labels            datatypes.JSON `json:"labels" binding:"required"`
+	ExtraAnnotations  datatypes.JSON `json:"extraAnnotations"`
+	Status            *bool          `json:"status"`
 }
 
 type UpdateRuleRequest struct {
@@ -18,6 +19,7 @@ type UpdateRuleRequest struct {
 	Description *string         `json:"description"`
 	Expr        *string         `json:"expr"`
 	For         *string         `json:"for"`
-	Labels      *datatypes.JSON `json:"labels"`
-	Status      *bool           `json:"status"`
+	Labels            *datatypes.JSON `json:"labels"`
+	ExtraAnnotations  *datatypes.JSON `json:"extraAnnotations"`
+	Status            *bool           `json:"status"`
 }

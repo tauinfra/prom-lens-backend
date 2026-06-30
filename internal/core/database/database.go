@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"valyria-backend/internal/core/config"
-	"valyria-backend/internal/core/logger"
+	"prom-lens-backend/internal/core/config"
+	"prom-lens-backend/internal/core/logger"
 )
 
 // InitDatabase 非全局

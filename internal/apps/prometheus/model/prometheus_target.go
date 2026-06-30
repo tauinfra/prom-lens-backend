@@ -18,5 +18,5 @@ type Target struct {
 }
 
 func (Target) TableName() string {
-	return "valyria_prometheus_target"
+	return "prom_lens_prometheus_target"
 }

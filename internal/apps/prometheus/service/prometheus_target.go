@@ -2,12 +2,12 @@ package service
 
 import (
 	"context"
-	"valyria-backend/internal/apps/prometheus/dto"
-	"valyria-backend/internal/apps/prometheus/executor"
-	"valyria-backend/internal/apps/prometheus/model"
-	"valyria-backend/internal/apps/prometheus/repository"
-	"valyria-backend/internal/apps/prometheus/request"
-	pg "valyria-backend/internal/core/pagination"
+	"prom-lens-backend/internal/apps/prometheus/dto"
+	"prom-lens-backend/internal/apps/prometheus/executor"
+	"prom-lens-backend/internal/apps/prometheus/model"
+	"prom-lens-backend/internal/apps/prometheus/repository"
+	"prom-lens-backend/internal/apps/prometheus/request"
+	pg "prom-lens-backend/internal/core/pagination"
 )
 
 // TargetManager 定义服务层接口
@@ -99,4 +99,3 @@ func (s *targetManager) Delete(ctx context.Context, id int) error {
 	}
 	return s.syncer.SyncTargetGroup(ctx, current.GroupID)
 }
-

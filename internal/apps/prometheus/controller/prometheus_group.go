@@ -3,10 +3,10 @@ package controller
 import (
 	"net/http"
 	"strconv"
-	"valyria-backend/internal/apps/prometheus/request"
-	"valyria-backend/internal/apps/prometheus/service"
-	pg "valyria-backend/internal/core/pagination"
-	"valyria-backend/internal/pkg/ginhelper"
+	"prom-lens-backend/internal/apps/prometheus/request"
+	"prom-lens-backend/internal/apps/prometheus/service"
+	pg "prom-lens-backend/internal/core/pagination"
+	"prom-lens-backend/internal/pkg/ginhelper"
 
 	"github.com/gin-gonic/gin"
 )
@@ -30,6 +30,9 @@ func (c *GroupController) List(ctx *gin.Context) {
 		SortBy:    ctx.Query("sortBy"),
 		SortOrder: ctx.Query("sortOrder"),
 		Keyword:   ctx.Query("keyword"), // 搜索关键字
+	}
+	if groupType := ctx.Query("type"); groupType != "" {
+		params.Filters = map[string]interface{}{"type": groupType}
 	}
 	data, pagination, err := c.group.List(ctx, params)
 	if err != nil {

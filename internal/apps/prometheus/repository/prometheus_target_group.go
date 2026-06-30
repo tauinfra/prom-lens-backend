@@ -2,8 +2,8 @@ package repository
 
 import (
 	"context"
-	"valyria-backend/internal/apps/prometheus/model"
-	pg "valyria-backend/internal/core/pagination"
+	"prom-lens-backend/internal/apps/prometheus/model"
+	pg "prom-lens-backend/internal/core/pagination"
 
 	"gorm.io/gorm"
 )
@@ -40,7 +40,7 @@ func (r *targetGroupRepository) List(ctx context.Context, params pg.QueryParams)
 func (r *targetGroupRepository) HasTargets(ctx context.Context, groupID int) (bool, error) {
 	var exists bool
 	if err := r.db.WithContext(ctx).
-		Raw("SELECT EXISTS(SELECT 1 FROM valyria_prometheus_target WHERE group_id = ?)", groupID).
+		Raw("SELECT EXISTS(SELECT 1 FROM prom_lens_prometheus_target WHERE group_id = ?)", groupID).
 		Scan(&exists).Error; err != nil {
 		return false, err
 	}

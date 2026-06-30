@@ -2,75 +2,140 @@ package service
 
 import (
 	"context"
-	"valyria-backend/internal/apps/authn/dto"
-	"valyria-backend/internal/apps/authn/model"
-	"valyria-backend/internal/apps/authn/repository"
-	"valyria-backend/internal/apps/authn/request"
-	pg "valyria-backend/internal/core/pagination"
+	"errors"
+	"fmt"
+
+	"prom-lens-backend/internal/apps/authn/dto"
+	"prom-lens-backend/internal/apps/authn/model"
+	"prom-lens-backend/internal/apps/authn/repository"
+	"prom-lens-backend/internal/apps/authn/request"
+	pg "prom-lens-backend/internal/core/pagination"
 
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
-type UserService interface {
+type UserManager interface {
 	List(ctx context.Context, params pg.QueryParams) ([]dto.UserDTO, pg.Pagination, error)
 	Get(ctx context.Context, id uint) (dto.UserDTO, error)
 	Create(ctx context.Context, req *request.CreateUserRequest) error
 	Update(ctx context.Context, id uint, req *request.UpdateUserRequest) error
-	Delete(ctx context.Context, id uint) error
+	Delete(ctx context.Context, operatorID uint, id uint) error
 	ResetPassword(ctx context.Context, id uint, req *request.ResetPasswordRequest) error
-	GetUserRoles(ctx context.Context, id uint) (data []dto.RoleDTO, err error)
-	UpdateUserRoles(ctx context.Context, id uint, roleIDs []uint) error
-	GetUserMenus(ctx context.Context, id uint) (data []dto.MenuDTO, err error)
-	UpdateUserMenus(ctx context.Context, id uint, menuIDs []uint) error
 }
 
-// userService 实现 UserService 接口
-type userService struct {
+type userManager struct {
 	repo repository.UserRepository
 	db   *gorm.DB
 }
 
-// NewUserService 创建新的 UserService 实例
-func NewUserService(db *gorm.DB, repo repository.UserRepository) UserService {
-	return &userService{db: db, repo: repo}
+func NewUserManager(db *gorm.DB, repo repository.UserRepository) UserManager {
+	return &userManager{db: db, repo: repo}
 }
 
-// List 列表
-func (s *userService) List(ctx context.Context, params pg.QueryParams) (data []dto.UserDTO, pagination pg.Pagination, err error) {
+func (s *userManager) List(ctx context.Context, params pg.QueryParams) ([]dto.UserDTO, pg.Pagination, error) {
 	users, pagination, err := s.repo.List(ctx, params)
 	if err != nil {
 		return nil, pagination, err
 	}
+	data := make([]dto.UserDTO, 0, len(users))
 	for _, user := range users {
-		dn := ""
-		if user.DN != nil {
-			dn = *user.DN
-		}
-		data = append(data, dto.UserDTO{
-			ID:          user.ID,
-			Username:    user.Username,
-			Nickname:    user.Nickname,
-			Email:       user.Email,
-			Phone:       user.Phone,
-			IsActive:    user.IsActive,
-			IsSuperuser: user.IsSuperuser,
-			IsLdap:      user.IsLdap,
-			DN:          dn,
-			Creator:     user.Creator,
-			CreatedAt:   user.CreatedAt,
-			UpdatedAt:   user.UpdatedAt,
-		})
+		data = append(data, toUserDTO(user))
 	}
 	return data, pagination, nil
 }
 
-// Get 查询
-func (s *userService) Get(ctx context.Context, id uint) (dto.UserDTO, error) {
+func (s *userManager) Get(ctx context.Context, id uint) (dto.UserDTO, error) {
 	user, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return dto.UserDTO{}, err
 	}
+	return toUserDTO(user), nil
+}
+
+func (s *userManager) Create(ctx context.Context, req *request.CreateUserRequest) error {
+	var dn *string
+	if req.DN != "" {
+		dn = &req.DN
+	}
+	isActive := true
+	if req.IsActive != nil {
+		isActive = *req.IsActive
+	}
+	isSuperuser := false
+	if req.IsSuperuser != nil {
+		isSuperuser = *req.IsSuperuser
+	}
+	isLdap := false
+	if req.IsLdap != nil {
+		isLdap = *req.IsLdap
+	}
+	data := &model.User{
+		Username:    req.Username,
+		Password:    req.Password,
+		Nickname:    req.Nickname,
+		Email:       req.Email,
+		Phone:       req.Phone,
+		IsActive:    &isActive,
+		IsSuperuser: &isSuperuser,
+		IsLdap:      &isLdap,
+		DN:          dn,
+		Creator:     req.Creator,
+	}
+	return s.repo.Create(ctx, data)
+}
+
+func (s *userManager) Update(ctx context.Context, id uint, req *request.UpdateUserRequest) error {
+	user, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if req.IsSuperuser != nil && !*req.IsSuperuser && user.IsSuperuser != nil && *user.IsSuperuser {
+		count, err := s.repo.CountSuperusers(ctx)
+		if err != nil {
+			return err
+		}
+		if count <= 1 {
+			return errors.New("不能取消唯一超级管理员权限")
+		}
+	}
+	update := &model.User{}
+	update.ApplyRequest(req)
+	return s.repo.Update(ctx, id, update)
+}
+
+func (s *userManager) Delete(ctx context.Context, operatorID uint, id uint) error {
+	if operatorID == id {
+		return errors.New("不能删除当前登录用户")
+	}
+	user, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if user.IsSuperuser != nil && *user.IsSuperuser {
+		count, err := s.repo.CountSuperusers(ctx)
+		if err != nil {
+			return err
+		}
+		if count <= 1 {
+			return errors.New("不能删除唯一超级管理员")
+		}
+	}
+	return s.repo.Delete(ctx, id)
+}
+
+func (s *userManager) ResetPassword(ctx context.Context, id uint, req *request.ResetPasswordRequest) error {
+	if _, err := s.repo.Get(ctx, id); err != nil {
+		return err
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("密码加密失败: %w", err)
+	}
+	return s.repo.ResetPassword(ctx, id, string(hash))
+}
+
+func toUserDTO(user model.User) dto.UserDTO {
 	dn := ""
 	if user.DN != nil {
 		dn = *user.DN
@@ -86,105 +151,8 @@ func (s *userService) Get(ctx context.Context, id uint) (dto.UserDTO, error) {
 		IsLdap:      user.IsLdap,
 		DN:          dn,
 		Creator:     user.Creator,
+		LastLogin:   user.LastLogin,
 		CreatedAt:   user.CreatedAt,
 		UpdatedAt:   user.UpdatedAt,
-	}, nil
-}
-
-// Create 创建
-func (s *userService) Create(ctx context.Context, req *request.CreateUserRequest) error {
-	var dn *string
-	if req.DN != "" {
-		dn = &req.DN
 	}
-	// 构建 Model
-	data := &model.User{
-		Username:    req.Username,
-		Nickname:    req.Nickname,
-		Email:       req.Email,
-		Phone:       req.Phone,
-		IsActive:    req.IsActive,
-		IsSuperuser: req.IsSuperuser,
-		IsLdap:      req.IsLdap,
-		DN:          dn,
-		Creator:     req.Creator,
-	}
-	return s.repo.Create(ctx, data)
-}
-
-// Update 更新
-func (s *userService) Update(ctx context.Context, id uint, req *request.UpdateUserRequest) error {
-	// 构建 Model
-	user := &model.User{}
-	user.ApplyRequest(req)
-	// 更新用户
-	return s.repo.Update(ctx, id, user)
-}
-
-// Delete 删除
-func (s *userService) Delete(ctx context.Context, id uint) error {
-	return s.repo.Delete(ctx, id)
-}
-
-// ResetPassword 重置密码
-func (s *userService) ResetPassword(ctx context.Context, id uint, req *request.ResetPasswordRequest) error {
-	// 重置密码
-	// 修改新秘密
-	newPassword, _ := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
-	return s.repo.ResetPassword(ctx, id, string(newPassword))
-}
-
-// GetUserRoles  查看用户角色
-func (s *userService) GetUserRoles(ctx context.Context, id uint) (data []dto.RoleDTO, err error) {
-	roles, err := s.repo.GetUserRoles(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	for _, role := range roles {
-		data = append(data, dto.RoleDTO{
-			ID:          role.ID,
-			Name:        role.Name,
-			Description: role.Description,
-			Creator:     role.Creator,
-			CreatedAt:   role.CreatedAt,
-			UpdatedAt:   role.UpdatedAt,
-		})
-	}
-	return data, nil
-}
-
-// UpdateUserRoles 更新用户角色
-func (s *userService) UpdateUserRoles(ctx context.Context, id uint, roleIDs []uint) error {
-	return s.repo.UpdateUserRoles(ctx, id, roleIDs)
-}
-
-// GetUserMenus 查看用户菜单
-func (s *userService) GetUserMenus(ctx context.Context, id uint) (data []dto.MenuDTO, err error) {
-	menus, err := s.repo.GetUserMenus(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	for _, m := range menus {
-		data = append(data, dto.MenuDTO{
-			ID:         m.ID,
-			ParentID:   m.ParentID,
-			Name:       m.Name,
-			Path:       m.Path,
-			Component:  m.Component,
-			Title:      m.Title,
-			Icon:       m.Icon,
-			Rank:       m.Rank,
-			ShowParent: m.ShowParent,
-			ShowLink:   m.ShowLink,
-			Creator:    m.Creator,
-			CreatedAt:  m.CreatedAt,
-			UpdatedAt:  m.UpdatedAt,
-		})
-	}
-	return data, nil
-}
-
-// UpdateUserMenus 更新用户菜单
-func (s *userService) UpdateUserMenus(ctx context.Context, id uint, menuIDs []uint) error {
-	return s.repo.UpdateUserMenus(ctx, id, menuIDs)
 }

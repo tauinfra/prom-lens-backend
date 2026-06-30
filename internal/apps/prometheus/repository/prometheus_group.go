@@ -2,8 +2,8 @@ package repository
 
 import (
 	"context"
-	"valyria-backend/internal/apps/prometheus/model"
-	pg "valyria-backend/internal/core/pagination"
+	"prom-lens-backend/internal/apps/prometheus/model"
+	pg "prom-lens-backend/internal/core/pagination"
 
 	"gorm.io/gorm"
 )
@@ -14,6 +14,9 @@ type GroupRepository interface {
 	HasRules(ctx context.Context, groupID int) (bool, error)
 	HasRecords(ctx context.Context, groupID int) (bool, error)
 	Get(ctx context.Context, id int) (model.Group, error)
+	GetByName(ctx context.Context, name string) (model.Group, error)
+	CountRules(ctx context.Context, groupID int) (int64, error)
+	CountRecords(ctx context.Context, groupID int) (int64, error)
 	Create(ctx context.Context, data *model.Group) error
 	Update(ctx context.Context, id int, data *model.Group) error
 	Delete(ctx context.Context, id int) error
@@ -42,7 +45,7 @@ func (r *groupRepository) List(ctx context.Context, params pg.QueryParams) (data
 func (r *groupRepository) HasRules(ctx context.Context, groupID int) (bool, error) {
 	var exists bool
 	if err := r.db.WithContext(ctx).
-		Raw("SELECT EXISTS(SELECT 1 FROM valyria_prometheus_rule WHERE group_id = ?)", groupID).
+		Raw("SELECT EXISTS(SELECT 1 FROM prom_lens_prometheus_rule WHERE group_id = ?)", groupID).
 		Scan(&exists).Error; err != nil {
 		return false, err
 	}
@@ -52,7 +55,7 @@ func (r *groupRepository) HasRules(ctx context.Context, groupID int) (bool, erro
 func (r *groupRepository) HasRecords(ctx context.Context, groupID int) (bool, error) {
 	var exists bool
 	if err := r.db.WithContext(ctx).
-		Raw("SELECT EXISTS(SELECT 1 FROM valyria_prometheus_record WHERE group_id = ?)", groupID).
+		Raw("SELECT EXISTS(SELECT 1 FROM prom_lens_prometheus_record WHERE group_id = ?)", groupID).
 		Scan(&exists).Error; err != nil {
 		return false, err
 	}
@@ -65,6 +68,26 @@ func (r *groupRepository) Get(ctx context.Context, id int) (data model.Group, er
 		return data, err
 	}
 	return
+}
+
+// GetByName 按名称查询规则组
+func (r *groupRepository) GetByName(ctx context.Context, name string) (data model.Group, err error) {
+	if err = r.db.WithContext(ctx).Where("name = ?", name).First(&data).Error; err != nil {
+		return data, err
+	}
+	return
+}
+
+func (r *groupRepository) CountRules(ctx context.Context, groupID int) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&model.Rule{}).Where("group_id = ?", groupID).Count(&count).Error
+	return count, err
+}
+
+func (r *groupRepository) CountRecords(ctx context.Context, groupID int) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&model.Record{}).Where("group_id = ?", groupID).Count(&count).Error
+	return count, err
 }
 
 // Create 创建

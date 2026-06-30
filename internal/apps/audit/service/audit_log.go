@@ -2,9 +2,9 @@ package service
 
 import (
 	"context"
-	"valyria-backend/internal/apps/audit/dto"
-	"valyria-backend/internal/apps/audit/repository"
-	pg "valyria-backend/internal/core/pagination"
+	"prom-lens-backend/internal/apps/audit/dto"
+	"prom-lens-backend/internal/apps/audit/repository"
+	pg "prom-lens-backend/internal/core/pagination"
 )
 
 type AuditLogService interface {

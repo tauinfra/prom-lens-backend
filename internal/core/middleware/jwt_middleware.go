@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
-	"valyria-backend/internal/core/config"
+	"prom-lens-backend/internal/core/config"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
@@ -251,6 +251,64 @@ func (j *JWTManager) RequireAuth() func(c *gin.Context) {
 		c.Set("uid", claims.UserID)
 		c.Set("username", claims.Username)
 		c.Set("isSuperuser", claims.Su) // 超级管理员
+		c.Next()
+	}
+}
+
+// RequireSuperuser 仅超级管理员可访问。
+func (j *JWTManager) RequireSuperuser() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		su, exists := c.Get("isSuperuser")
+		if !exists {
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"code":    403,
+				"msg":     "仅超级管理员可执行此操作",
+			})
+			c.Abort()
+			return
+		}
+		isSuperuser, ok := su.(bool)
+		if !ok || !isSuperuser {
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"code":    403,
+				"msg":     "仅超级管理员可执行此操作",
+			})
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// RequireSuperuserForDelete 非超级管理员禁止 DELETE 请求。
+func (j *JWTManager) RequireSuperuserForDelete() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if c.Request.Method != http.MethodDelete {
+			c.Next()
+			return
+		}
+		su, exists := c.Get("isSuperuser")
+		if !exists {
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"code":    403,
+				"msg":     "仅超级管理员可执行删除操作",
+			})
+			c.Abort()
+			return
+		}
+		isSuperuser, ok := su.(bool)
+		if !ok || !isSuperuser {
+			c.JSON(http.StatusForbidden, gin.H{
+				"success": false,
+				"code":    403,
+				"msg":     "仅超级管理员可执行删除操作",
+			})
+			c.Abort()
+			return
+		}
 		c.Next()
 	}
 }

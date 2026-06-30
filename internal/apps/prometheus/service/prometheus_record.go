@@ -2,12 +2,15 @@ package service
 
 import (
 	"context"
-	"valyria-backend/internal/apps/prometheus/dto"
-	"valyria-backend/internal/apps/prometheus/executor"
-	"valyria-backend/internal/apps/prometheus/model"
-	"valyria-backend/internal/apps/prometheus/repository"
-	"valyria-backend/internal/apps/prometheus/request"
-	pg "valyria-backend/internal/core/pagination"
+	"fmt"
+
+	prom "prom-lens-backend/internal/apps/prometheus"
+	"prom-lens-backend/internal/apps/prometheus/dto"
+	"prom-lens-backend/internal/apps/prometheus/executor"
+	"prom-lens-backend/internal/apps/prometheus/model"
+	"prom-lens-backend/internal/apps/prometheus/repository"
+	"prom-lens-backend/internal/apps/prometheus/request"
+	pg "prom-lens-backend/internal/core/pagination"
 )
 
 // RecordManager 定义服务层接口
@@ -21,13 +24,14 @@ type RecordManager interface {
 
 // recordManager 实现 RecordManager 接口
 type recordManager struct {
+	group  repository.GroupRepository
 	record repository.RecordRepository
 	syncer executor.RuleSyncer
 }
 
 // NewRecordManager 创建新的 RecordManager 实例
-func NewRecordManager(record repository.RecordRepository, syncer executor.RuleSyncer) RecordManager {
-	return &recordManager{record: record, syncer: syncer}
+func NewRecordManager(group repository.GroupRepository, record repository.RecordRepository, syncer executor.RuleSyncer) RecordManager {
+	return &recordManager{group: group, record: record, syncer: syncer}
 }
 
 // List 列表
@@ -52,6 +56,13 @@ func (s *recordManager) Get(ctx context.Context, id int) (dto.RecordDTO, error) 
 }
 
 func (s *recordManager) Create(ctx context.Context, groupID int, req *request.CreateRecordRequest) error {
+	group, err := s.group.Get(ctx, groupID)
+	if err != nil {
+		return err
+	}
+	if !prom.IsAlertingRecords(group.Type) {
+		return fmt.Errorf("group type is %q, only %q groups can contain records", group.Type, prom.GroupTypeAlertingRecords)
+	}
 	data := &model.Record{
 		Name:    req.Name,
 		Expr:    req.Expr,
@@ -91,4 +102,3 @@ func (s *recordManager) Delete(ctx context.Context, id int) error {
 	}
 	return s.syncer.SyncRuleGroup(ctx, current.GroupID)
 }
-

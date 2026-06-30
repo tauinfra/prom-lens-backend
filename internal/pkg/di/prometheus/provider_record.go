@@ -1,10 +1,10 @@
 package prometheus
 
 import (
-	"valyria-backend/internal/apps/prometheus/controller"
-	"valyria-backend/internal/apps/prometheus/executor"
-	"valyria-backend/internal/apps/prometheus/repository"
-	"valyria-backend/internal/apps/prometheus/service"
+	"prom-lens-backend/internal/apps/prometheus/controller"
+	"prom-lens-backend/internal/apps/prometheus/executor"
+	"prom-lens-backend/internal/apps/prometheus/repository"
+	"prom-lens-backend/internal/apps/prometheus/service"
 
 	"gorm.io/gorm"
 )
@@ -16,8 +16,9 @@ type RecordProvider struct {
 }
 
 func NewRecordProvider(db *gorm.DB, syncer executor.RuleSyncer) *RecordProvider {
+	groupRepo := repository.NewGroupRepository(db)
 	repo := repository.NewRecordRepository(db)
-	svc := service.NewRecordManager(repo, syncer)
+	svc := service.NewRecordManager(groupRepo, repo, syncer)
 	ctrl := controller.NewRecordController(svc)
 
 	return &RecordProvider{
