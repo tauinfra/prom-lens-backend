@@ -18,6 +18,10 @@ cmd/server/                 # 程序入口
 config/
   config.example.yaml       # 配置模板（复制为 config.yaml 后修改）
   migrations/               # 数据库迁移 SQL（手工执行）
+deployments/
+  docker/Dockerfile         # 容器镜像
+  kubernetes/               # K8s 清单（kustomize）
+scripts/                    # 构建、部署、迁移、本地开发脚本
 internal/
   apps/
     authn/                  # 登录、改密、用户资料、用户管理
@@ -143,7 +147,7 @@ Prometheus/Thanos Ruler → Alertmanager（route 匹配）
 receivers:
   - name: hk-test
     webhook_configs:
-      - url: http://<prom-lens-host>:8081/api/v1/alerting/webhook/hk-test
+      - url: http://<prom-lens-host>:8080/api/v1/alerting/webhook/hk-test
         send_resolved: true
         http_config:
           bearer_token: <callbackToken>
@@ -170,7 +174,7 @@ kubectl exec -n monitoring deploy/alertmanager -- wget -qO- \
 #### 模拟 Prom Lens 回调
 
 ```bash
-curl -X POST "http://<prom-lens-host>:8081/api/v1/alerting/webhook/hk-test" \
+curl -X POST "http://<prom-lens-host>:8080/api/v1/alerting/webhook/hk-test" \
   -H "Authorization: Bearer <callbackToken>" \
   -H "Content-Type: application/json" \
   -d '{"status":"firing","receiver":"hk-test","alerts":[{"status":"firing","labels":{"alertname":"Test"},"annotations":{"summary":"测试"},"startsAt":"2026-01-01T00:00:00Z"}]}'
@@ -202,19 +206,19 @@ cp config/config.example.yaml config/config.yaml
 环境变量前缀：`PROM_LENS_`，嵌套用下划线，例如：
 
 ```bash
-export PROM_LENS_SERVER_PORT=8081
+export PROM_LENS_SERVER_PORT=8080
 export PROM_LENS_DATABASE_PASSWORD=your-password
 export PROM_LENS_APP_JWT_SECRET=your-secret-at-least-16-chars
-export PROM_LENS_BASE_URL=http://your-host:8081
+export PROM_LENS_BASE_URL=http://your-host:8080
 ```
 
 主要配置项：
 
 ```yaml
 server:
-  port: 8081
+  port: 8080
 
-base_url: "http://127.0.0.1:8081"   # 对外访问地址，AM 回调用；环境变量 PROM_LENS_BASE_URL
+base_url: "http://127.0.0.1:8080"   # 对外访问地址，AM 回调用；环境变量 PROM_LENS_BASE_URL
 
 app:
   jwt_secret: "<生产环境请用环境变量注入>"
@@ -278,6 +282,57 @@ mysql ... prom_lens < config/migrations/authn_admin_seed.sql   # 默认 admin，
 mysql ... prom_lens < config/migrations/upgrade_legacy.sql
 ```
 
+或使用脚本：
+
+```bash
+MYSQL_HOST=127.0.0.1 MYSQL_USER=root MYSQL_PASSWORD=xxx ./scripts/migrate.sh init
+./scripts/migrate.sh upgrade   # 旧库增量
+```
+
+## 构建与部署
+
+### 本地开发
+
+```bash
+./scripts/dev.sh
+```
+
+### Docker 镜像
+
+```bash
+# 本地镜像
+./scripts/build.sh
+
+# 指定仓库并推送
+IMAGE_REGISTRY=your-registry.io/your-ns PUSH=1 ./scripts/build.sh
+```
+
+### Kubernetes
+
+```bash
+# 1. 准备密钥（勿提交 secret.yaml）
+cp deployments/kubernetes/secret.yaml.example deployments/kubernetes/secret.yaml
+
+# 2. 按需修改 deployments/kubernetes/configmap.yaml（数据库地址、ConfigMap 名称等）
+
+# 3. 构建并部署
+./scripts/build.sh
+IMAGE=prom-lens-backend:20260521120000 ./scripts/deploy.sh
+```
+
+清单说明：
+
+| 文件 | 说明 |
+|------|------|
+| `namespace.yaml` | 命名空间 `prom-lens` |
+| `serviceaccount.yaml` + `rbac.yaml` | 集群内访问 ConfigMap 权限 |
+| `configmap.yaml` | ConfigMap `prom-lens-config`（挂载为 `/app/config/config.yaml`） |
+| `secret.yaml.example` | Secret `prom-lens-secret`（数据库密码、JWT 密钥模板） |
+| `deployment.yaml` | 探针 `/health`、`/readyz`，端口 `8080` |
+| `service.yaml` | ClusterIP `8080` |
+
+`base_url` 默认指向集群内 Service：`http://prom-lens-backend.prom-lens.svc.cluster.local:8080`。
+
 ## 运行
 
 ```bash
@@ -285,7 +340,7 @@ mysql ... prom_lens < config/migrations/upgrade_legacy.sql
 go run ./cmd/server -c config/config.yaml
 ```
 
-默认监听 `http://localhost:8081`，API 前缀 `/api/v1`。
+默认监听 `http://localhost:8080`，API 前缀 `/api/v1`。
 
 ```bash
 # 编译

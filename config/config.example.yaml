@@ -1,5 +1,5 @@
 server:
-  port: 8081
+  port: 8080
 
 app:
   jwt_secret: "change-me-use-env-PROM_LENS_APP_JWT_SECRET-in-production"
@@ -42,7 +42,7 @@ prometheus:
     configmap: thanos-ruler-config
 
 # Alertmanager 回调本服务的地址，须为 AM Pod 可访问的地址
-base_url: "http://127.0.0.1:8081"
+base_url: "http://127.0.0.1:8080"
 
 alerting:
   lark_timeout: 10s

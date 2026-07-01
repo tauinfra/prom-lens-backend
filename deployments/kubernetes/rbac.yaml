@@ -1,0 +1,26 @@
+# 同步 Prometheus / Thanos / Alertmanager ConfigMap 所需权限
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: prom-lens-configmap-rw
+  labels:
+    app.kubernetes.io/name: prom-lens-backend
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: prom-lens-configmap-rw
+  labels:
+    app.kubernetes.io/name: prom-lens-backend
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: prom-lens-configmap-rw
+subjects:
+  - kind: ServiceAccount
+    name: prom-lens-backend
+    namespace: prom-lens

@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: prom-lens
+
+resources:
+  - serviceaccount.yaml
+  - rbac.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+
+labels:
+  - pairs:
+      app.kubernetes.io/part-of: prom-lens
+      app.kubernetes.io/name: prom-lens-backend
+    includeSelectors: true
+
+images:
+  - name: prom-lens-backend
+    newName: prom-lens-backend
+    newTag: latest

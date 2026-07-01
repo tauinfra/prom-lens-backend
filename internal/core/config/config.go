@@ -99,9 +99,52 @@ type AlertmanagerSyncConfig struct {
 
 var C *Config // Deprecated: 使用 InitConfig 返回的配置，全局变量仅用于向后兼容
 
+// bindConfigEnvs 将配置项绑定到环境变量，Unmarshal 时才会覆盖 YAML 中的值。
+// 变量名规则：PROM_LENS_ + 配置键（点号换为下划线），例如 database.password -> PROM_LENS_DATABASE_PASSWORD
+func bindConfigEnvs() error {
+	keys := []string{
+		"server.host",
+		"server.port",
+		"server.mode",
+		"database.username",
+		"database.password",
+		"database.host",
+		"database.dbname",
+		"database.port",
+		"database.max_idle_conns",
+		"database.max_open_conns",
+		"database.conn_max_lifetime",
+		"app.jwt_secret",
+		"app.jwt_expire",
+		"base_url",
+		"auth.access_token_expires",
+		"auth.refresh_token_expires",
+		"auth.issuer",
+		"auth.audience",
+		"logging.log_dir",
+		"logging.log_level",
+		"logging.enable_console",
+		"prometheus.target.namespace",
+		"prometheus.target.configMap",
+		"prometheus.rule.namespace",
+		"prometheus.rule.configmap",
+		"alerting.lark_timeout",
+		"alerting.alertmanager.namespace",
+		"alerting.alertmanager.configmap",
+		"alerting.alertmanager.config_key",
+		"alerting.alertmanager.default_receiver",
+	}
+	for _, key := range keys {
+		if err := viper.BindEnv(key); err != nil {
+			return fmt.Errorf("bind env for %s: %w", key, err)
+		}
+	}
+	return nil
+}
+
 // InitConfig 初始化配置
 // 支持通过环境变量覆盖配置值，环境变量命名规则：
-//   - 前缀：PROM_LENS_
+//   - 前缀：PROM_LENS（自动拼接下划线，勿写成 PROM_LENS_）
 //   - 嵌套结构使用下划线分隔，例如：
 //     PROM_LENS_SERVER_PORT -> server.port
 //     PROM_LENS_DATABASE_HOST -> database.host
@@ -117,13 +160,15 @@ func InitConfig(cfgFile string) (*Config, error) {
 	viper.SetConfigFile(cfgFile)
 
 	// 设置环境变量前缀
-	viper.SetEnvPrefix("PROM_LENS_")
+	viper.SetEnvPrefix("PROM_LENS")
 	// 设置环境变量键名替换器：将点号替换为下划线，支持嵌套结构
 	// 例如：PROM_LENS_SERVER_PORT -> server.port
 	//      PROM_LENS_DATABASE_HOST -> database.host
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	// 自动读取环境变量
 	viper.AutomaticEnv()
+	if err := bindConfigEnvs(); err != nil {
+		return nil, fmt.Errorf("bind environment variables failed: %w", err)
+	}
 
 	if err := viper.ReadInConfig(); err != nil {
 		return nil, fmt.Errorf("fatal read the configuration file failed, %w", err)
