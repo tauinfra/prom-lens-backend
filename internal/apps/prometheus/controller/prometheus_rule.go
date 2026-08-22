@@ -39,7 +39,7 @@ func (c *RuleController) List(ctx *gin.Context) {
 	}
 	data, pagination, err := c.rule.List(ctx, params)
 	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data, "pagination": pagination})
@@ -53,7 +53,7 @@ func (c *RuleController) Get(ctx *gin.Context) {
 	ruleID := int(ruleIDU)
 	data, err := c.rule.Get(ctx, ruleID)
 	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data})
@@ -67,11 +67,11 @@ func (c *RuleController) Create(ctx *gin.Context) {
 	groupID := int(groupIDU)
 	var req request.CreateRuleRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	if err := c.rule.Create(ctx, groupID, &req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
@@ -85,11 +85,11 @@ func (c *RuleController) Update(ctx *gin.Context) {
 	var req request.UpdateRuleRequest
 	ruleID := int(ruleIDU)
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	if err := c.rule.Update(ctx, ruleID, &req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
@@ -102,7 +102,7 @@ func (c *RuleController) Delete(ctx *gin.Context) {
 	}
 	id := int(idU)
 	if err := c.rule.Delete(ctx, id); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})

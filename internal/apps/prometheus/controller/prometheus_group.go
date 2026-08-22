@@ -36,7 +36,7 @@ func (c *GroupController) List(ctx *gin.Context) {
 	}
 	data, pagination, err := c.group.List(ctx, params)
 	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data, "pagination": pagination})
@@ -50,7 +50,7 @@ func (c *GroupController) Get(ctx *gin.Context) {
 	id := int(idU)
 	data, err := c.group.Get(ctx, id)
 	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data})
@@ -59,11 +59,11 @@ func (c *GroupController) Get(ctx *gin.Context) {
 func (c *GroupController) Create(ctx *gin.Context) {
 	var req request.CreateGroupRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	if err := c.group.Create(ctx, &req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
@@ -77,11 +77,11 @@ func (c *GroupController) Update(ctx *gin.Context) {
 	var req request.UpdateGroupRequest
 	id := int(idU)
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	if err := c.group.Update(ctx, id, &req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
@@ -94,7 +94,7 @@ func (c *GroupController) Delete(ctx *gin.Context) {
 	}
 	id := int(idU)
 	if err := c.group.Delete(ctx, id); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})

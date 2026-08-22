@@ -38,7 +38,7 @@ func (c *RecordController) List(ctx *gin.Context) {
 	}
 	data, pagination, err := c.record.List(ctx, params)
 	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data, "pagination": pagination})
@@ -52,7 +52,7 @@ func (c *RecordController) Get(ctx *gin.Context) {
 	id := int(idU)
 	data, err := c.record.Get(ctx, id)
 	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data})
@@ -66,11 +66,11 @@ func (c *RecordController) Create(ctx *gin.Context) {
 	groupID := int(groupIDU)
 	var req request.CreateRecordRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	if err := c.record.Create(ctx, groupID, &req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
@@ -84,11 +84,11 @@ func (c *RecordController) Update(ctx *gin.Context) {
 	var req request.UpdateRecordRequest
 	recordID := int(recordIDU)
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	if err := c.record.Update(ctx, recordID, &req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
@@ -101,7 +101,7 @@ func (c *RecordController) Delete(ctx *gin.Context) {
 	}
 	id := int(idU)
 	if err := c.record.Delete(ctx, id); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})

@@ -9,6 +9,8 @@ import (
 
 	"gorm.io/datatypes"
 	"gorm.io/gorm"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -47,41 +49,53 @@ func (s *configMapTargetSyncer) SyncTargetGroup(ctx context.Context, groupID int
 	return s.syncTargetToConfigMap(ctx, groupID, group.Name, data)
 }
 
-type targetConfig struct {
-	IPAddress string         `json:"ipAddress"`
-	Port      int            `json:"port"`
-	Labels    datatypes.JSON `json:"labels"`
-}
-
-type targetGroupConfig struct {
-	Name        string         `json:"name"`
-	Description string         `json:"description,omitempty"`
-	Labels      datatypes.JSON `json:"labels"`
-	Targets     []targetConfig `json:"targets"`
+type fileSDTarget struct {
+	Targets []string          `json:"targets"`
+	Labels  map[string]string `json:"labels"`
 }
 
 func (s *configMapTargetSyncer) buildTargetGroupJSON(group model.TargetGroup, targets []model.Target) ([]byte, error) {
-	result := targetGroupConfig{
-		Name:        group.Name,
-		Description: group.Description,
-		Labels:      group.Labels,
-		Targets:     make([]targetConfig, 0, len(targets)),
-	}
+	entries := make([]fileSDTarget, 0, len(targets))
 	for _, item := range targets {
 		if item.Enabled != nil && !*item.Enabled {
 			continue
 		}
-		result.Targets = append(result.Targets, targetConfig{
-			IPAddress: item.IPAddress,
-			Port:      item.Port,
-			Labels:    item.Labels,
+		labels, err := mergeTargetLabels(group.Labels, item.Labels)
+		if err != nil {
+			return nil, fmt.Errorf("merge labels for %s:%d: %w", item.IPAddress, item.Port, err)
+		}
+		entries = append(entries, fileSDTarget{
+			Targets: []string{fmt.Sprintf("%s:%d", item.IPAddress, item.Port)},
+			Labels:  labels,
 		})
 	}
-	data, err := json.Marshal(result)
+	data, err := json.MarshalIndent(entries, "", "  ")
 	if err != nil {
-		return nil, fmt.Errorf("marshal target group failed: %w", err)
+		return nil, fmt.Errorf("marshal file_sd targets failed: %w", err)
 	}
 	return data, nil
+}
+
+func mergeTargetLabels(groupLabels, targetLabels datatypes.JSON) (map[string]string, error) {
+	out := make(map[string]string)
+	if len(groupLabels) > 0 {
+		if err := json.Unmarshal(groupLabels, &out); err != nil {
+			return nil, err
+		}
+	}
+	if len(targetLabels) > 0 {
+		var target map[string]string
+		if err := json.Unmarshal(targetLabels, &target); err != nil {
+			return nil, err
+		}
+		for k, v := range target {
+			out[k] = v
+		}
+	}
+	if out == nil {
+		out = map[string]string{}
+	}
+	return out, nil
 }
 
 func (s *configMapTargetSyncer) fetchGroupWithTargets(ctx context.Context, groupID int) (model.TargetGroup, []model.Target, error) {
@@ -108,6 +122,21 @@ func (s *configMapTargetSyncer) syncTargetToConfigMap(ctx context.Context, group
 	key := fmt.Sprintf("%s.json", groupName)
 
 	cm, err := client.CoreV1().ConfigMaps(promNamespace).Get(ctx, promConfigMap, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		cm = &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      promConfigMap,
+				Namespace: promNamespace,
+			},
+			Data: map[string]string{key: string(data)},
+		}
+		if _, err = client.CoreV1().ConfigMaps(promNamespace).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
+			logPromSyncFailed("target", groupID, groupName, "create_configmap", err)
+			return fmt.Errorf("create target configmap %s/%s: %w", promNamespace, promConfigMap, err)
+		}
+		logPromSyncSuccess("target", promNamespace, promConfigMap, key, len(data))
+		return nil
+	}
 	if err != nil {
 		logPromSyncFailed("target", groupID, groupName, "get_configmap", err)
 		return err

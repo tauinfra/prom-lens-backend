@@ -19,7 +19,7 @@ func NewSyncController(sync service.SyncManager) *SyncController {
 func (c *SyncController) ImportRules(ctx *gin.Context) {
 	result, err := c.sync.ImportRulesFromConfigMap(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	success := len(result.Errors) == 0

@@ -48,3 +48,19 @@ Target
       },
       "enabled": false
     }'
+
+ConfigMap 同步格式（Prometheus file_sd）
+
+每个目标组写入 `{groupName}.json`，内容为 file_sd 数组；组级 `labels` 与节点 `labels` 合并，节点覆盖组：
+
+```json
+[
+  {
+    "targets": ["10.10.10.10:9100"],
+    "labels": {
+      "job": "node-exporter",
+      "hostname": "node01"
+    }
+  }
+]
+```

@@ -2,12 +2,19 @@ package service
 
 import (
 	"context"
+	"errors"
+	"fmt"
+
 	"prom-lens-backend/internal/apps/prometheus/dto"
 	"prom-lens-backend/internal/apps/prometheus/executor"
 	"prom-lens-backend/internal/apps/prometheus/model"
 	"prom-lens-backend/internal/apps/prometheus/repository"
 	"prom-lens-backend/internal/apps/prometheus/request"
+	"prom-lens-backend/internal/core/logger"
 	pg "prom-lens-backend/internal/core/pagination"
+
+	"github.com/go-sql-driver/mysql"
+	"gorm.io/gorm"
 )
 
 // TargetManager 定义服务层接口
@@ -60,9 +67,15 @@ func (s *targetManager) Create(ctx context.Context, groupID int, req *request.Cr
 		Enabled:   req.Enabled,
 	}
 	if err := s.target.Create(ctx, data); err != nil {
-		return err
+		return translateTargetCreateError(err, groupID, req.IPAddress, req.Port)
 	}
-	return s.syncer.SyncTargetGroup(ctx, groupID)
+	if err := s.syncer.SyncTargetGroup(ctx, groupID); err != nil {
+		if delErr := s.target.Delete(ctx, int(data.ID)); delErr != nil {
+			logger.Errorf("[prom-sync] rollback target create id=%d failed err=%v", data.ID, delErr)
+		}
+		return fmt.Errorf("ConfigMap 同步失败，已回滚数据库写入: %w", err)
+	}
+	return nil
 }
 
 func (s *targetManager) Update(ctx context.Context, id int, req *request.UpdateTargetRequest) error {
@@ -86,7 +99,13 @@ func (s *targetManager) Update(ctx context.Context, id int, req *request.UpdateT
 	if err := s.target.Update(ctx, id, data); err != nil {
 		return err
 	}
-	return s.syncer.SyncTargetGroup(ctx, current.GroupID)
+	if err := s.syncer.SyncTargetGroup(ctx, current.GroupID); err != nil {
+		if revErr := s.target.Update(ctx, id, targetSnapshot(&current)); revErr != nil {
+			logger.Errorf("[prom-sync] rollback target update id=%d failed err=%v", id, revErr)
+		}
+		return fmt.Errorf("ConfigMap 同步失败，已回滚数据库更新: %w", err)
+	}
+	return nil
 }
 
 func (s *targetManager) Delete(ctx context.Context, id int) error {
@@ -97,5 +116,38 @@ func (s *targetManager) Delete(ctx context.Context, id int) error {
 	if err := s.target.Delete(ctx, id); err != nil {
 		return err
 	}
-	return s.syncer.SyncTargetGroup(ctx, current.GroupID)
+	if err := s.syncer.SyncTargetGroup(ctx, current.GroupID); err != nil {
+		restore := &model.Target{
+			GroupID:   current.GroupID,
+			IPAddress: current.IPAddress,
+			Port:      current.Port,
+			Labels:    current.Labels,
+			Enabled:   current.Enabled,
+		}
+		if recErr := s.target.Create(ctx, restore); recErr != nil {
+			logger.Errorf("[prom-sync] rollback target delete id=%d failed err=%v", id, recErr)
+		}
+		return fmt.Errorf("ConfigMap 同步失败，已回滚数据库删除: %w", err)
+	}
+	return nil
+}
+
+func targetSnapshot(t *model.Target) *model.Target {
+	return &model.Target{
+		IPAddress: t.IPAddress,
+		Port:      t.Port,
+		Labels:    t.Labels,
+		Enabled:   t.Enabled,
+	}
+}
+
+func translateTargetCreateError(err error, groupID int, ip string, port int) error {
+	var mysqlErr *mysql.MySQLError
+	if errors.As(err, &mysqlErr) && mysqlErr.Number == 1062 {
+		return fmt.Errorf("采集节点 %s:%d 在组 %d 中已存在；若此前同步失败导致数据残留，请直接更新该节点或先删除后重建", ip, port, groupID)
+	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return fmt.Errorf("采集节点 %s:%d 在组 %d 中已存在；若此前同步失败导致数据残留，请直接更新该节点或先删除后重建", ip, port, groupID)
+	}
+	return err
 }

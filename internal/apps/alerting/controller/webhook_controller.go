@@ -34,7 +34,7 @@ func (c *WebhookController) List(ctx *gin.Context) {
 	}
 	data, pagination, err := c.webhook.List(ctx, params)
 	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data, "pagination": pagination})
@@ -47,7 +47,7 @@ func (c *WebhookController) Get(ctx *gin.Context) {
 	}
 	data, err := c.webhook.Get(ctx, int(idU))
 	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data})
@@ -56,16 +56,16 @@ func (c *WebhookController) Get(ctx *gin.Context) {
 func (c *WebhookController) Create(ctx *gin.Context) {
 	var req request.CreateWebhookRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	data, amSync, err := c.webhook.Create(ctx, &req)
 	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error(), "amSync": amSync})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error(), "amSync": amSync})
 		return
 	}
 	if !amSync.Success {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": amSync.Msg, "data": data, "amSync": amSync})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": amSync.Msg, "data": data, "amSync": amSync})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "data": data, "amSync": amSync})
@@ -78,16 +78,16 @@ func (c *WebhookController) Update(ctx *gin.Context) {
 	}
 	var req request.UpdateWebhookRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	amSync, err := c.webhook.Update(ctx, int(idU), &req)
 	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error(), "amSync": amSync})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error(), "amSync": amSync})
 		return
 	}
 	if !amSync.Success {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": amSync.Msg, "amSync": amSync})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": amSync.Msg, "amSync": amSync})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "amSync": amSync})
@@ -100,11 +100,11 @@ func (c *WebhookController) Delete(ctx *gin.Context) {
 	}
 	amSync, err := c.webhook.Delete(ctx, int(idU))
 	if err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error(), "amSync": amSync})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error(), "amSync": amSync})
 		return
 	}
 	if !amSync.Success {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": amSync.Msg, "amSync": amSync})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": amSync.Msg, "amSync": amSync})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "amSync": amSync})
@@ -113,7 +113,7 @@ func (c *WebhookController) Delete(ctx *gin.Context) {
 func (c *WebhookController) SyncReceivers(ctx *gin.Context) {
 	amSync := c.webhook.SyncReceivers(ctx)
 	if !amSync.Success {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": amSync.Msg, "amSync": amSync})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": amSync.Msg, "amSync": amSync})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200, "amSync": amSync})
@@ -122,11 +122,11 @@ func (c *WebhookController) SyncReceivers(ctx *gin.Context) {
 func (c *WebhookController) Verify(ctx *gin.Context) {
 	var req request.VerifyWebhookRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	if err := c.webhook.Verify(ctx, &req); err != nil {
-		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": 20000, "msg": err.Error()})
+		ctx.JSON(http.StatusOK, gin.H{"success": false, "code": -1, "msg": err.Error()})
 		return
 	}
 	ctx.JSON(http.StatusOK, gin.H{"success": true, "code": 200})
